@@ -9,10 +9,10 @@ Claude Codeでタスクベースの開発を行うためのカスタムスラッ
 | コマンド | モデル | 理由 |
 |---------|--------|------|
 | task-init | **Haiku 4.5** | ファイル作成のみ、コスト削減 |
-| task-req | Sonnet 4.5 | 要件分析、バランス重視 |
-| task-design | **Opus 4.5** | 高精度な設計が必要 |
-| task-todo | **Opus 4.5** | 高精度な計画・見積もりが必要 |
-| task-develop | Sonnet 4.5 | 実装作業、コスト効率重視 |
+| task-req | **Opus 4.6** | 高精度な要件分析 |
+| task-design | **Opus 4.6** | 高精度な設計 |
+| task-todo | **Opus 4.6** | 高精度な計画・見積もり |
+| task-develop | **Opus 4.6** | 高精度な実装作業 |
 
 ## Serena MCP対応
 

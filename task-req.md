@@ -1,5 +1,5 @@
 ---
-model: claude-sonnet-4-5-20250929
+model: claude-opus-4-6
 description: 顧客依頼から要件定義書を作成
 ---
 

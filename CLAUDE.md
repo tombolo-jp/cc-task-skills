@@ -35,10 +35,10 @@ Each command specifies an appropriate model via Frontmatter for optimal cost-per
 | Command | Model | Model ID | Reason |
 |---------|-------|----------|--------|
 | task-init | **Haiku 4.5** | `claude-haiku-4-5-20251001` | Simple file creation, cost reduction |
-| task-req | Sonnet 4.5 | `claude-sonnet-4-5-20250929` | Balanced requirements analysis |
-| task-design | **Opus 4.5** | `claude-opus-4-5-20251101` | High-precision design required |
-| task-todo | **Opus 4.5** | `claude-opus-4-5-20251101` | High-precision planning and estimation |
-| task-develop | Sonnet 4.5 | `claude-sonnet-4-5-20250929` | Cost-efficient implementation |
+| task-req | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
+| task-design | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
+| task-todo | **Opus 4.6** | `claude-opus-4-6` | High-precision planning and estimation |
+| task-develop | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
 
 ## Serena MCP Integration
 

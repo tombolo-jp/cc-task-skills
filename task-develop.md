@@ -1,5 +1,5 @@
 ---
-model: claude-sonnet-4-5-20250929
+model: claude-opus-4-6
 description: 詳細設計とToDoリストに基づいて開発を実行
 ---
 
