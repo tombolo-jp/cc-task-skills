@@ -12,7 +12,7 @@ Claude Codeでタスクベースの開発を行うためのカスタムスラッ
 | task-req | **Opus 4.6** | 高精度な要件分析 |
 | task-design | **Opus 4.6** | 高精度な設計 |
 | task-todo | **Opus 4.6** | 高精度な計画・見積もり |
-| task-develop | **Opus 4.6** | 高精度な実装作業 |
+| task-develop | **Sonnet 4.6** | コストと精度のバランスを重視した実装 |
 
 ## Serena MCP対応
 
