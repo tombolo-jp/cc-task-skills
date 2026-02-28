@@ -1,6 +1,7 @@
 ---
 model: claude-opus-4-6
 description: 顧客依頼から要件定義書を作成
+context: fork
 ---
 
 # 要件定義書の作成

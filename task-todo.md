@@ -1,6 +1,7 @@
 ---
 model: claude-opus-4-6
 description: タスクのToDoリストと工数見積もりを作成
+context: fork
 ---
 
 # タスクのToDoリストと工数見積もり作成

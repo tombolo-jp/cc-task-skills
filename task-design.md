@@ -1,6 +1,7 @@
 ---
 model: claude-opus-4-6
 description: タスクの詳細設計を作成
+context: fork
 ---
 
 # タスクの詳細設計

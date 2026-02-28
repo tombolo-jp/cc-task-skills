@@ -11,7 +11,7 @@ This repository contains a collection of custom slash commands for Claude Code t
 The repository contains 5 interconnected slash commands that work together:
 
 1. **task-design.md** - Analyzes existing systems and creates technical design
-2. **task-develop.md** - Executes implementation based on todo list and creates development report
+2. **task-dev.md** - Executes implementation based on todo list and creates development report
 3. **task-init.md** - Creates task environment and requirements gathering
 4. **task-req.md** - Creates requirements draft from raw customer requests
 5. **task-todo.md** - Breaks down design into actionable development tasks with effort estimation
@@ -25,7 +25,7 @@ Each task follows a standardized directory structure:
 ├── requirements.md  # Requirements definition
 ├── design.md       # Technical design
 ├── todo.md         # Implementation todo list with effort estimation
-└── develop-result.md # Development completion report
+└── dev-result.md # Development completion report
 ```
 
 ## Model Configuration
@@ -38,7 +38,7 @@ Each command specifies an appropriate model via Frontmatter for optimal cost-per
 | task-req | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
 | task-design | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
 | task-todo | **Opus 4.6** | `claude-opus-4-6` | High-precision planning and estimation |
-| task-develop | **Sonnet 4.6** | `claude-sonnet-4-6` | Balance of cost and precision for implementation |
+| task-dev | **Sonnet 4.6** | `claude-sonnet-4-6` | Balance of cost and precision for implementation |
 
 ## Serena MCP Integration
 
@@ -53,7 +53,7 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 - Creates `.claude/tasks/{task_name}/` directory structure
 - Creates init.md for capturing raw customer requests
 - Generates templated requirements.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
-- Note: design.md, todo.md, develop-result.md are created by their respective commands (task-design, task-todo, task-develop)
+- Note: design.md, todo.md, dev-result.md are created by their respective commands (task-design, task-todo, task-dev)
 - **Serena MCP**: Utilizes Serena MCP for file creation and template generation when available
 
 ### /task-req {task_name}
@@ -76,12 +76,12 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 - Considers dependencies and development efficiency
 - **Serena MCP**: Utilizes Serena MCP for task analysis, effort estimation, and document generation when available
 
-### /task-develop {task_name}
+### /task-dev {task_name}
 - Reads design.md and todo.md to understand implementation requirements
 - Implements tasks sequentially following the todo list
 - Maintains code quality, follows existing patterns, includes appropriate tests
 - Reports progress after each task completion
-- Creates develop-result.md with implementation overview, changed files, technical details, and completion report
+- Creates dev-result.md with implementation overview, changed files, technical details, and completion report
 - **Serena MCP**: Utilizes Serena MCP for code generation, implementation, testing, and validation when available
 
 ## Installation Method
@@ -143,8 +143,11 @@ task-*.mdファイルを追加・変更・削除した場合は、必ず以下�
 
 ## 更新履歴
 
-最終更新: 2026-02-18 00:00:00
-更新内容: task-developコマンドの使用モデルをOpus 4.6からSonnet 4.6に変更。コストと精度のバランスを最適化。
+最終更新: 2026-02-24 00:00:00
+更新内容: 全コマンド（task-init, task-req, task-design, task-todo, task-dev）のフロントマターに `context: fork` を追加。各コマンドが独立したフォークコンテキストで実行されるようになり、前コマンドの実行履歴によるコンテキスト圧迫を防止。
 
-前回更新: 2026-02-15 00:00:00
+前回更新: 2026-02-18 00:00:00
+更新内容: task-devコマンドの使用モデルをOpus 4.6からSonnet 4.6に変更。コストと精度のバランスを最適化。
+
+前々回更新: 2026-02-15 00:00:00
 更新内容: task-todoコマンドの工数見積もりを改修。一律20%バッファから、リスクの不確実性レベル（低/中/高）に応じた変動幅に変更。最終見積もりに最少工数（楽観）・最大工数（悲観）の範囲表示を導入。出力テンプレートを追加。

@@ -2,6 +2,7 @@
 model: claude-haiku-4-5-20251001
 description: タスク環境の初期化
 allowed-tools: Write, Bash(mkdir:*)
+context: fork
 ---
 
 # タスク初期化
