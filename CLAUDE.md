@@ -4,17 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a collection of custom slash commands for Claude Code that implement a task-based development workflow. The commands provide a structured approach to software development with 5 distinct phases: initialization, design, planning, and implementation.
+This repository contains a collection of custom slash commands for Claude Code that implement a task-based development workflow. The commands provide a structured approach to software development with 7 distinct phases: initialization, requirements, design, planning, implementation, review, and fix.
 
 ## Command Architecture
 
-The repository contains 5 interconnected slash commands that work together:
+The repository contains 7 interconnected slash commands that work together:
 
 1. **task-design.md** - Analyzes existing systems and creates technical design
 2. **task-dev.md** - Executes implementation based on todo list and creates development report
-3. **task-init.md** - Creates task environment and requirements gathering
-4. **task-req.md** - Creates requirements draft from raw customer requests
-5. **task-todo.md** - Breaks down design into actionable development tasks with effort estimation
+3. **task-fix.md** - Fixes code based on review feedback
+4. **task-init.md** - Creates task environment and requirements gathering
+5. **task-req.md** - Creates requirements draft from raw customer requests
+6. **task-review.md** - Reviews implementation against requirements, design, and code quality
+7. **task-todo.md** - Breaks down design into actionable development tasks with effort estimation
 
 ## Task Management Structure
 
@@ -25,7 +27,9 @@ Each task follows a standardized directory structure:
 ├── requirements.md  # Requirements definition
 ├── design.md       # Technical design
 ├── todo.md         # Implementation todo list with effort estimation
-└── dev-result.md # Development completion report
+├── dev-result.md   # Development completion report
+├── review.md       # Code review report
+└── fix-result.md   # Fix completion report
 ```
 
 ## Model Configuration
@@ -39,6 +43,8 @@ Each command specifies an appropriate model via Frontmatter for optimal cost-per
 | task-design | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
 | task-todo | **Opus 4.6** | `claude-opus-4-6` | High-precision planning and estimation |
 | task-dev | **Sonnet 4.6** | `claude-sonnet-4-6` | Balance of cost and precision for implementation |
+| task-review | **Opus 4.6** | `claude-opus-4-6` | High-precision review required |
+| task-fix | **Sonnet 4.6** | `claude-sonnet-4-6` | Balance of cost and precision for fixes |
 
 ## Serena MCP Integration
 
@@ -53,7 +59,7 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 - Creates `.claude/tasks/{task_name}/` directory structure
 - Creates init.md for capturing raw customer requests
 - Generates templated requirements.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
-- Note: design.md, todo.md, dev-result.md are created by their respective commands (task-design, task-todo, task-dev)
+- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md are created by their respective commands (task-design, task-todo, task-dev, task-review, task-fix)
 - **Serena MCP**: Utilizes Serena MCP for file creation and template generation when available
 
 ### /task-req {task_name}
@@ -84,6 +90,19 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 - Creates dev-result.md with implementation overview, changed files, technical details, and completion report
 - **Serena MCP**: Utilizes Serena MCP for code generation, implementation, testing, and validation when available
 
+### /task-review {task_name}
+- Reads requirements.md, design.md, todo.md, and dev-result.md to understand full context
+- Verifies actual code against requirements, design, and todo completion status
+- Evaluates code quality (readability, maintainability, security, error handling, tests)
+- Creates review.md with overall judgment (no fix needed / fix recommended / fix required) and detailed findings
+- **Serena MCP**: Utilizes Serena MCP for code analysis and review when available
+
+### /task-fix {task_name}
+- Reads review.md and design.md to understand required fixes
+- Implements code fixes based on review feedback while maintaining design consistency
+- Creates fix-result.md with fix details, changed files, and verification results
+- **Serena MCP**: Utilizes Serena MCP for code fixes and validation when available
+
 ## Installation Method
 
 Commands are installed by copying the .md files to the Claude Code commands directory:
@@ -97,7 +116,7 @@ The commands support Japanese language for requirements definition and design do
 
 ## Development Philosophy
 
-- **Staged Development**: Sequential progression through requirements → design → planning → implementation
+- **Staged Development**: Sequential progression through requirements → design → planning → implementation → review → fix
 - **Quality Focus**: Emphasizes code quality, maintainability, and integration with existing systems
 - **Progress Tracking**: Concrete todo lists for work management
 - **Consistency**: Respects existing code patterns and conventions
@@ -143,11 +162,17 @@ task-*.mdファイルを追加・変更・削除した場合は、必ず以下�
 
 ## 更新履歴
 
-最終更新: 2026-02-24 00:00:00
+最終更新: 2026-03-01 00:00:00
+更新内容: task-dev.mdから不要な「専門エージェント（Subagent）の活用」セクションを削除。ロール説明を「開発マネージャー」から「開発者」に変更。README.mdからサブエージェント言及を削除。
+
+前回更新: 2026-02-28 00:00:00
+更新内容: task-review.md（コードレビュー）と task-fix.md（修正実行）を新規追加。task-dev.md から確認エージェントを分離し、レビューと修正を独立した専用コマンドとして実装。コマンド数を5→7に拡張。
+
+前々回更新: 2026-02-24 00:00:00
 更新内容: 全コマンド（task-init, task-req, task-design, task-todo, task-dev）のフロントマターに `context: fork` を追加。各コマンドが独立したフォークコンテキストで実行されるようになり、前コマンドの実行履歴によるコンテキスト圧迫を防止。
 
-前回更新: 2026-02-18 00:00:00
+前々回更新: 2026-02-18 00:00:00
 更新内容: task-devコマンドの使用モデルをOpus 4.6からSonnet 4.6に変更。コストと精度のバランスを最適化。
 
-前々回更新: 2026-02-15 00:00:00
-更新内容: task-todoコマンドの工数見積もりを改修。一律20%バッファから、リスクの不確実性レベル（低/中/高）に応じた変動幅に変更。最終見積もりに最少工数（楽観）・最大工数（悲観）の範囲表示を導入。出力テンプレートを追加。
+前々回更新: 2026-02-24 00:00:00
+更新内容: 全コマンド（task-init, task-req, task-design, task-todo, task-dev）のフロントマターに `context: fork` を追加。各コマンドが独立したフォークコンテキストで実行されるようになり、前コマンドの実行履歴によるコンテキスト圧迫を防止。

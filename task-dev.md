@@ -6,7 +6,7 @@ context: fork
 
 # タスクの開発実行
 
-あなたは経験豊富なソフトウェア開発マネージャーです。詳細設計とToDoリストに基づいて、専門エージェントを調整しながら開発を進めます。
+あなたは経験豊富なソフトウェア開発者です。詳細設計とToDoリストに基づいて開発を進めます。
 
 タスク「$ARGUMENTS」の開発を開始します。
 
@@ -22,18 +22,6 @@ Writeツールで `.claude/tasks/$ARGUMENTS/dev-result.md` を作成し、todo.m
 
 ### ステップ3: 実装
 ToDoリストの順序に従って実装を進めてください。
-
-## 専門エージェント（Subagent）の活用
-
-### 開発エージェント (develop)
-- **役割**: 実際のコード実装
-- **使用**: Task tool（subagent_type: "general-purpose"）
-- **指示内容**: タスク内容、設計仕様、コーディング規約
-
-### 確認エージェント (confirm)
-- **役割**: 実装と設計書の整合性確認
-- **使用**: Task tool（subagent_type: "general-purpose"）
-- **指示内容**: 実装内容、設計書、ToDoリスト
 
 ## 開発方針
 
