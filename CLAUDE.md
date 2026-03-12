@@ -4,19 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a collection of custom slash commands for Claude Code that implement a task-based development workflow. The commands provide a structured approach to software development with 7 distinct phases: initialization, requirements, design, planning, implementation, review, and fix.
+This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 7 distinct phases: initialization, requirements, design, planning, implementation, review, and fix.
 
-## Command Architecture
+## Skill Architecture
 
-The repository contains 7 interconnected slash commands that work together:
+The repository contains 7 interconnected skills that work together:
 
-1. **task-design.md** - Analyzes existing systems and creates technical design
-2. **task-dev.md** - Executes implementation based on todo list and creates development report
-3. **task-fix.md** - Fixes code based on review feedback
-4. **task-init.md** - Creates task environment and requirements gathering
-5. **task-req.md** - Creates requirements draft from raw customer requests
-6. **task-review.md** - Reviews implementation against requirements, design, and code quality
-7. **task-todo.md** - Breaks down design into actionable development tasks with effort estimation
+1. **task-design** - Analyzes existing systems and creates technical design
+2. **task-dev** - Executes implementation based on todo list and creates development report
+3. **task-fix** - Fixes code based on review feedback
+4. **task-init** - Creates task environment and requirements gathering
+5. **task-req** - Creates requirements draft from raw customer requests
+6. **task-review** - Reviews implementation against requirements, design, and code quality
+7. **task-todo** - Breaks down design into actionable development tasks with effort estimation
+
+Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
 ## Task Management Structure
 
@@ -34,32 +36,45 @@ Each task follows a standardized directory structure:
 
 ## Model Configuration
 
-Each command specifies an appropriate model via Frontmatter for optimal cost-performance balance:
+Each skill specifies an appropriate model alias via Frontmatter for optimal cost-performance balance:
 
-| Command | Model | Model ID | Reason |
-|---------|-------|----------|--------|
-| task-init | **Haiku 4.5** | `claude-haiku-4-5-20251001` | Simple file creation, cost reduction |
-| task-req | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
-| task-design | **Opus 4.6** | `claude-opus-4-6` | High-precision design required |
-| task-todo | **Opus 4.6** | `claude-opus-4-6` | High-precision planning and estimation |
-| task-dev | **Sonnet 4.6** | `claude-sonnet-4-6` | Balance of cost and precision for implementation |
-| task-review | **Opus 4.6** | `claude-opus-4-6` | High-precision review required |
-| task-fix | **Sonnet 4.6** | `claude-sonnet-4-6` | Balance of cost and precision for fixes |
+| Skill | Model | Alias | Reason |
+|-------|-------|-------|--------|
+| task-init | **Haiku** | `haiku` | Simple file creation, cost reduction |
+| task-req | **Opus** | `opus` | High-precision design required |
+| task-design | **Opus** | `opus` | High-precision design required |
+| task-todo | **Opus** | `opus` | High-precision planning and estimation |
+| task-dev | **Sonnet** | `sonnet` | Balance of cost and precision for implementation |
+| task-review | **Opus** | `opus` | High-precision review required |
+| task-fix | **Sonnet** | `sonnet` | Balance of cost and precision for fixes |
+
+Model aliases (`haiku`, `sonnet`, `opus`) are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models.
+
+## モデル確認の仕組み
+
+各コマンドは、出力する報告書の末尾に「メタ情報」セクションを含めます。
+サブエージェントが自己申告する形で、実際に使用されたモデル名と実行日時が記録されます。
+これにより、`context: fork` で起動されたサブエージェントのモデルをユーザーが確認できます。
+
+## agent フィールドについて
+
+現在のコマンドはすべてファイル書き込みを伴うため、`agent` フィールドは指定していません（デフォルトの汎用エージェント）。
+将来的にread-only分析コマンドを追加する場合は、`agent: Explore` の指定を検討してください。
 
 ## Serena MCP Integration
 
-All commands support Serena MCP (Model Context Protocol). When Serena MCP tools are available, commands will:
+All skills support Serena MCP (Model Context Protocol). When Serena MCP tools are available, skills will:
 - Automatically detect and utilize Serena MCP capabilities
 - Prioritize Serena MCP functions for document generation, analysis, and validation
 - Fall back to traditional methods when Serena MCP is unavailable
 
-## Key Command Behaviors
+## Key Skill Behaviors
 
 ### /task-init {task_name}
 - Creates `.claude/tasks/{task_name}/` directory structure
 - Creates init.md for capturing raw customer requests
 - Generates templated requirements.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
-- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md are created by their respective commands (task-design, task-todo, task-dev, task-review, task-fix)
+- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix)
 - **Serena MCP**: Utilizes Serena MCP for file creation and template generation when available
 
 ### /task-req {task_name}
@@ -76,6 +91,7 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 
 ### /task-todo {task_name}
 - Reads requirements.md and design.md to understand technical requirements
+- Reads effort estimation template from `templates/todo-template.md`
 - Creates structured todo.md with implementation order, task breakdown, deliverables, priorities, and checkpoints
 - Performs comprehensive effort estimation for manual implementation by intermediate-level programmers
 - Includes risk factors, buffers, and realistic time estimates for each task
@@ -84,6 +100,7 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 
 ### /task-dev {task_name}
 - Reads design.md and todo.md to understand implementation requirements
+- Reads report template from `templates/dev-result-template.md`
 - Implements tasks sequentially following the todo list
 - Maintains code quality, follows existing patterns, includes appropriate tests
 - Reports progress after each task completion
@@ -92,6 +109,7 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 
 ### /task-review {task_name}
 - Reads requirements.md, design.md, todo.md, and dev-result.md to understand full context
+- Reads review template from `templates/review-template.md`
 - Verifies actual code against requirements, design, and todo completion status
 - Evaluates code quality (readability, maintainability, security, error handling, tests)
 - Creates review.md with overall judgment (no fix needed / fix recommended / fix required) and detailed findings
@@ -99,20 +117,21 @@ All commands support Serena MCP (Model Context Protocol). When Serena MCP tools 
 
 ### /task-fix {task_name}
 - Reads review.md and design.md to understand required fixes
+- Reads fix report template from `templates/fix-result-template.md`
 - Implements code fixes based on review feedback while maintaining design consistency
 - Creates fix-result.md with fix details, changed files, and verification results
 - **Serena MCP**: Utilizes Serena MCP for code fixes and validation when available
 
 ## Installation Method
 
-Commands are installed by copying the .md files to the Claude Code commands directory:
+Skills are installed by copying the skill directories to the Claude Code skills directory:
 ```bash
-cp claude-code-task-commands/*.md ~/.claude/commands/
+cp -r claude-code-task-commands/skills/* ~/.claude/skills/
 ```
 
 ## Language Support
 
-The commands support Japanese language for requirements definition and design documentation while maintaining English compatibility for technical implementation.
+The skills support Japanese language for requirements definition and design documentation while maintaining English compatibility for technical implementation.
 
 ## Development Philosophy
 
@@ -140,16 +159,16 @@ Claude Codeでこのプロジェクトに関する作業を行う際は、必ず
    - 日本語での記述を継続
    - 実例やコマンド例を含める
 
-### コマンドファイル更新時の自動処理
-task-*.mdファイルを追加・変更・削除した場合は、必ず以下を実行してください：
+### スキルファイル更新時の自動処理
+skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、必ず以下を実行してください：
 
-1. CLAUDE.mdの「Command Architecture」セクションを更新
-   - コマンド数を正確に反映（「6 distinct phases」等の数値を更新）
-   - コマンドリストを更新（ファイル名のアルファベット順）
-   - 新規コマンドの説明を追加
+1. CLAUDE.mdの「Skill Architecture」セクションを更新
+   - スキル数を正確に反映
+   - スキルリストを更新（名前のアルファベット順）
+   - 新規スキルの説明を追加
 
 2. README.mdの更新
-   - 使用方法セクションに新規コマンドの説明を追加
+   - 使用方法セクションに新規スキルの説明を追加
    - ワークフローの順番に従って配置
    - 具体的な使用例を含める
 
@@ -162,10 +181,13 @@ task-*.mdファイルを追加・変更・削除した場合は、必ず以下�
 
 ## 更新履歴
 
-最終更新: 2026-03-01 00:00:00
+最終更新: 2026-03-12 00:00:00
+更新内容: .claude/commands/形式から.claude/skills/形式への全面移行。モデルIDをエイリアス（haiku, opus, sonnet）に変更。報告書テンプレートをサポートファイル（templates/）に分離。メタ情報自己申告の仕組みを導入。disable-model-invocationを全スキルに追加。
+
+前回更新: 2026-03-01 00:00:00
 更新内容: task-dev.mdから不要な「専門エージェント（Subagent）の活用」セクションを削除。ロール説明を「開発マネージャー」から「開発者」に変更。README.mdからサブエージェント言及を削除。
 
-前回更新: 2026-02-28 00:00:00
+前々回更新: 2026-02-28 00:00:00
 更新内容: task-review.md（コードレビュー）と task-fix.md（修正実行）を新規追加。task-dev.md から確認エージェントを分離し、レビューと修正を独立した専用コマンドとして実装。コマンド数を5→7に拡張。
 
 前々回更新: 2026-02-24 00:00:00
@@ -173,6 +195,3 @@ task-*.mdファイルを追加・変更・削除した場合は、必ず以下�
 
 前々回更新: 2026-02-18 00:00:00
 更新内容: task-devコマンドの使用モデルをOpus 4.6からSonnet 4.6に変更。コストと精度のバランスを最適化。
-
-前々回更新: 2026-02-24 00:00:00
-更新内容: 全コマンド（task-init, task-req, task-design, task-todo, task-dev）のフロントマターに `context: fork` を追加。各コマンドが独立したフォークコンテキストで実行されるようになり、前コマンドの実行履歴によるコンテキスト圧迫を防止。
