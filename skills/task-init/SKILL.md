@@ -25,8 +25,8 @@ Writeツールで `.claude/tasks/$ARGUMENTS/init.md` を作成してください
 <!-- 要件定義の準備をします。このタスクの概要を、簡潔に入力してください。 -->
 ```
 
-### ステップ3: requirements.md を作成
-Writeツールで `.claude/tasks/$ARGUMENTS/requirements.md` を作成してください:
+### ステップ3: req.md を作成
+Writeツールで `.claude/tasks/$ARGUMENTS/req.md` を作成してください:
 ```markdown
 # 要件定義
 

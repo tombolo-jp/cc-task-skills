@@ -16,7 +16,7 @@ disable-model-invocation: true
 
 ### ステップ1: ファイル読み込み
 Readツールで以下のファイルを読み込み、タスクの全体像を把握してください:
-- `.claude/tasks/$ARGUMENTS/requirements.md`（要件定義）
+- `.claude/tasks/$ARGUMENTS/req.md`（要件定義）
 - `.claude/tasks/$ARGUMENTS/design.md`（詳細設計）
 
 ### ステップ2: 分析

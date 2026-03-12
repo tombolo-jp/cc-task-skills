@@ -15,7 +15,7 @@ disable-model-invocation: true
 ## 手順
 
 ### ステップ1: 要件確認
-Readツールで `.claude/tasks/$ARGUMENTS/requirements.md` を読み込み、要件を確認してください。
+Readツールで `.claude/tasks/$ARGUMENTS/req.md` を読み込み、要件を確認してください。
 
 ### ステップ2: プロジェクト分析
 Glob/Grep/Readツールで既存プロジェクトの構造を分析してください（整合性と保守性を考慮）。

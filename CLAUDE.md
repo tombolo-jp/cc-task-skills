@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 7 distinct phases: initialization, requirements, design, planning, implementation, review, and fix.
+This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 8 distinct phases: initialization, requirements, design, planning, implementation, review, fix, and verification.
 
 ## Skill Architecture
 
-The repository contains 7 interconnected skills that work together:
+The repository contains 8 interconnected skills that work together:
 
 1. **task-design** - Analyzes existing systems and creates technical design
 2. **task-dev** - Executes implementation based on todo list and creates development report
@@ -17,6 +17,7 @@ The repository contains 7 interconnected skills that work together:
 5. **task-req** - Creates requirements draft from raw customer requests
 6. **task-review** - Reviews implementation against requirements, design, and code quality
 7. **task-todo** - Breaks down design into actionable development tasks with effort estimation
+8. **task-verify** - Generates manual verification procedure document
 
 Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
@@ -26,12 +27,13 @@ Each task follows a standardized directory structure:
 ```
 .claude/tasks/{task_name}/
 ├── init.md         # Raw customer requests
-├── requirements.md  # Requirements definition
+├── req.md          # Requirements definition
 ├── design.md       # Technical design
 ├── todo.md         # Implementation todo list with effort estimation
 ├── dev-result.md   # Development completion report
 ├── review.md       # Code review report
-└── fix-result.md   # Fix completion report
+├── fix-result.md   # Fix completion report
+└── verify.md       # Manual verification procedure
 ```
 
 ## Model Configuration
@@ -47,6 +49,7 @@ Each skill specifies an appropriate model alias via Frontmatter for optimal cost
 | task-dev | **Sonnet** | `sonnet` | Balance of cost and precision for implementation |
 | task-review | **Opus** | `opus` | High-precision review required |
 | task-fix | **Sonnet** | `sonnet` | Balance of cost and precision for fixes |
+| task-verify | **Opus** | `opus` | High-precision verification procedure generation |
 
 Model aliases (`haiku`, `sonnet`, `opus`) are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models.
 
@@ -73,24 +76,24 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 ### /task-init {task_name}
 - Creates `.claude/tasks/{task_name}/` directory structure
 - Creates init.md for capturing raw customer requests
-- Generates templated requirements.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
-- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix)
+- Generates templated req.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
+- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md, verify.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix, task-verify)
 - **Serena MCP**: Utilizes Serena MCP for file creation and template generation when available
 
 ### /task-req {task_name}
 - Reads raw customer requests from init.md
-- Analyzes and structures the information into requirements.md
+- Analyzes and structures the information into req.md
 - Creates a draft requirements document from ambiguous requests
 - **Serena MCP**: Utilizes Serena MCP for requirements analysis and document generation when available
 
 ### /task-design {task_name}
-- Reads requirements.md to understand task scope
+- Reads req.md to understand task scope
 - Analyzes existing project structure to maintain consistency
 - Creates comprehensive design.md covering architecture, components, file structure, data design, API design, error handling, testing strategy, and performance/security considerations
 - **Serena MCP**: Utilizes Serena MCP for design document creation, analysis, and validation when available
 
 ### /task-todo {task_name}
-- Reads requirements.md and design.md to understand technical requirements
+- Reads req.md and design.md to understand technical requirements
 - Reads effort estimation template from `templates/todo-template.md`
 - Creates structured todo.md with implementation order, task breakdown, deliverables, priorities, and checkpoints
 - Performs comprehensive effort estimation for manual implementation by intermediate-level programmers
@@ -108,7 +111,7 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - **Serena MCP**: Utilizes Serena MCP for code generation, implementation, testing, and validation when available
 
 ### /task-review {task_name}
-- Reads requirements.md, design.md, todo.md, and dev-result.md to understand full context
+- Reads req.md, design.md, todo.md, and dev-result.md to understand full context
 - Reads review template from `templates/review-template.md`
 - Verifies actual code against requirements, design, and todo completion status
 - Evaluates code quality (readability, maintainability, security, error handling, tests)
@@ -121,6 +124,16 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Implements code fixes based on review feedback while maintaining design consistency
 - Creates fix-result.md with fix details, changed files, and verification results
 - **Serena MCP**: Utilizes Serena MCP for code fixes and validation when available
+
+### /task-verify {task_name}
+- Reads req.md, design.md, and dev-result.md for full context
+- Optionally reads review.md and fix-result.md if they exist
+- Reads verify template from `templates/verify-template.md`
+- Analyzes actual implementation code to generate concrete verification steps
+- Creates verify.md with bite-sized, checkbox-based manual verification procedures
+- Prioritizes quick-win steps first to lower psychological barriers
+- Includes exact commands, URLs, test data, and expected results
+- **Serena MCP**: Utilizes Serena MCP for code analysis and verification procedure generation when available
 
 ## Installation Method
 
@@ -135,7 +148,7 @@ The skills support Japanese language for requirements definition and design docu
 
 ## Development Philosophy
 
-- **Staged Development**: Sequential progression through requirements → design → planning → implementation → review → fix
+- **Staged Development**: Sequential progression through requirements → design → planning → implementation → review → fix → verification
 - **Quality Focus**: Emphasizes code quality, maintainability, and integration with existing systems
 - **Progress Tracking**: Concrete todo lists for work management
 - **Consistency**: Respects existing code patterns and conventions
@@ -181,10 +194,13 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-03-12 00:00:00
+最終更新: 2026-03-13 00:00:00
+更新内容: task-verify（手動検証手順書生成）を新規追加。開発完了後にコピペで実行可能な検証手順をチェックボックス形式で生成するスキル。スキル数を7→8に拡張。
+
+前回更新: 2026-03-12 00:00:00
 更新内容: .claude/commands/形式から.claude/skills/形式への全面移行。モデルIDをエイリアス（haiku, opus, sonnet）に変更。報告書テンプレートをサポートファイル（templates/）に分離。メタ情報自己申告の仕組みを導入。disable-model-invocationを全スキルに追加。
 
-前回更新: 2026-03-01 00:00:00
+前々回更新: 2026-03-01 00:00:00
 更新内容: task-dev.mdから不要な「専門エージェント（Subagent）の活用」セクションを削除。ロール説明を「開発マネージャー」から「開発者」に変更。README.mdからサブエージェント言及を削除。
 
 前々回更新: 2026-02-28 00:00:00
