@@ -8,16 +8,16 @@ This repository contains a collection of custom skills for Claude Code that impl
 
 ## Skill Architecture
 
-The repository contains 8 interconnected skills that work together:
+The repository contains 8 interconnected skills that work together (task-init excluded from `--team` option support):
 
-1. **task-design** - Analyzes existing systems and creates technical design
-2. **task-dev** - Executes implementation based on todo list and creates development report
-3. **task-fix** - Fixes code based on review feedback
-4. **task-init** - Creates task environment and requirements gathering
-5. **task-req** - Creates requirements draft from raw customer requests
-6. **task-review** - Reviews implementation against requirements, design, and code quality
-7. **task-todo** - Breaks down design into actionable development tasks with effort estimation
-8. **task-verify** - Generates manual verification procedure document
+1. **task-design** - Analyzes existing systems and creates technical design. Supports `--team` option.
+2. **task-dev** - Executes implementation based on todo list and creates development report. Supports `--team` option.
+3. **task-fix** - Fixes code based on review feedback. Supports `--team` option.
+4. **task-init** - Creates task environment and requirements gathering. (No `--team` support — uses haiku model)
+5. **task-req** - Creates requirements draft from raw customer requests. Supports `--team` option.
+6. **task-review** - Reviews implementation against requirements, design, and code quality. Supports `--team` option.
+7. **task-todo** - Breaks down design into actionable development tasks with effort estimation. Supports `--team` option.
+8. **task-verify** - Generates manual verification procedure document. Supports `--team` option.
 
 Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
@@ -82,52 +82,58 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Note: design.md, todo.md, dev-result.md, review.md, fix-result.md, verify.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix, task-verify)
 - **Serena MCP**: Utilizes Serena MCP for file creation and template generation when available
 
-### /task-req {task_name}
+### /task-req {task_name} [--team]
 - Reads raw customer requests from init.md
 - Analyzes and structures the information into req.md
 - Creates a draft requirements document from ambiguous requests
+- **`--team` option**: Deploys a market/tech research agent and an impact analysis agent in parallel; team lead integrates results into req.md
 - **Serena MCP**: Utilizes Serena MCP for requirements analysis and document generation when available
 
-### /task-design {task_name}
+### /task-design {task_name} [--team]
 - Reads req.md to understand task scope
 - Analyzes existing project structure to maintain consistency
 - Creates comprehensive design.md covering architecture, components, file structure, data design, API design, error handling, testing strategy, and performance/security considerations
+- **`--team` option**: Deploys data design, API/interface design, and security/performance agents in parallel; team lead integrates results into design.md
 - **Serena MCP**: Utilizes Serena MCP for design document creation, analysis, and validation when available
 
-### /task-todo {task_name}
+### /task-todo {task_name} [--team]
 - Reads req.md and design.md to understand technical requirements
 - Reads effort estimation template from `templates/todo-template.md`
 - Creates structured todo.md with implementation order, task breakdown, deliverables, priorities, and checkpoints
 - Performs comprehensive effort estimation for manual implementation by intermediate-level programmers
 - Includes risk factors, buffers, and realistic time estimates for each task
 - Considers dependencies and development efficiency
+- **`--team` option**: Deploys a task decomposition agent and an effort estimation agent in parallel; team lead integrates results into todo.md
 - **Serena MCP**: Utilizes Serena MCP for task analysis, effort estimation, and document generation when available
 
-### /task-dev {task_name}
+### /task-dev {task_name} [--team]
 - Reads design.md and todo.md to understand implementation requirements
 - Reads report template from `templates/dev-result-template.md`
 - Implements tasks sequentially following the todo list
 - Maintains code quality, follows existing patterns, includes appropriate tests
 - Reports progress after each task completion
 - Creates dev-result.md with implementation overview, changed files, technical details, and completion report
+- **`--team` option**: Analyzes todo.md dependencies and assigns independent tasks to parallel agents; file-level work splitting prevents concurrent edit conflicts
 - **Serena MCP**: Utilizes Serena MCP for code generation, implementation, testing, and validation when available
 
-### /task-review {task_name}
+### /task-review {task_name} [--team]
 - Reads req.md, design.md, todo.md, and dev-result.md to understand full context
 - Reads review template from `templates/review-template.md`
 - Verifies actual code against requirements, design, and todo completion status
 - Evaluates code quality (readability, maintainability, security, error handling, tests)
 - Creates review.md with overall judgment (no fix needed / fix recommended / fix required) and detailed findings
+- **`--team` option**: Deploys requirements/design consistency, code quality, and security/robustness reviewers in parallel; team lead deduplicates and prioritizes findings
 - **Serena MCP**: Utilizes Serena MCP for code analysis and review when available
 
-### /task-fix {task_name}
+### /task-fix {task_name} [--team]
 - Reads review.md and design.md to understand required fixes
 - Reads fix report template from `templates/fix-result-template.md`
 - Implements code fixes based on review feedback while maintaining design consistency
 - Creates fix-result.md with fix details, changed files, and verification results
+- **`--team` option**: Assigns independent fixes to parallel agents by file; sequential fixes handled by team lead to avoid conflicts
 - **Serena MCP**: Utilizes Serena MCP for code fixes and validation when available
 
-### /task-verify {task_name}
+### /task-verify {task_name} [--team]
 - Reads req.md, design.md, and dev-result.md for full context
 - Optionally reads review.md and fix-result.md if they exist
 - Reads verify template from `templates/verify-template.md`
@@ -135,7 +141,50 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Creates verify.md with bite-sized, checkbox-based manual verification procedures
 - Prioritizes quick-win steps first to lower psychological barriers
 - Includes exact commands, URLs, test data, and expected results
+- **`--team` option**: Deploys happy-path, edge-case/error, and non-functional/regression verification designers in parallel; team lead integrates into Quick Win-first ordering
 - **Serena MCP**: Utilizes Serena MCP for code analysis and verification procedure generation when available
+
+## Agent Teams オプション
+
+7つのスキル（task-init を除く全スキル）は `--team` オプションに対応しています。
+
+### 使用方法
+
+```bash
+/task-dev my-task --team
+/task-review my-task --team
+```
+
+### 有効化方法
+
+Agent Teams 機能を使用するには、`~/.claude/settings.json` に以下を追加してください:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+### コストに関する注意
+
+Agent Teams はトークン消費が大幅に増加します。チームメイトの生成・管理に伴い、通常の2〜5倍のトークンを消費する可能性があります。
+
+### フォールバック動作
+
+`--team` が指定されたが環境変数が未設定の場合、以下のメッセージを表示して通常モードにフォールバックします:
+
+「⚠️ Agent Teams が有効化されていません。`~/.claude/settings.json` の `env` フィールドに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を設定してください。今回は通常モードで実行します。」
+
+### 後方互換性
+
+`--team` オプションなしの従来の呼び出し方法は引き続き動作します:
+
+```bash
+/task-dev my-task       # 従来通り単一エージェントで実行
+/task-dev my-task --team  # Agent Teams モードで実行
+```
 
 ## Installation Method
 
@@ -197,6 +246,12 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 ## 更新履歴
 
 最終更新: 2026-03-15 00:00:00
+更新内容: Agent Teams有効化方法をexportコマンドから~/.claude/settings.jsonのenvフィールドに変更。フォールバックメッセージを「今回は通常モードで実行します。」に修正。README.md・CLAUDE.md・7つのSKILL.mdを更新。
+
+前回更新: 2026-03-15 00:00:00
+更新内容: Agent Teams オプション（--team）対応。7スキル（task-init除く）にargument-hint、引数パースセクション、Agent Teamsセクションを追加。$ARGUMENTS→$ARGUMENTS[0]への置換。テンプレートファイルのメタ情報にAgent Teams行を追加。CLAUDE.md・README.mdにAgent Teams使用方法を追記。
+
+前回更新: 2026-03-15 00:00:00
 更新内容: 全スキルにパス解決ルールを追加。タスクファイルがプロジェクトルート配下に正しく作成されるよう、pwdで絶対パスを取得して使用する仕組みを導入。
 
 前回更新: 2026-03-13 00:00:00

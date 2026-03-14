@@ -4,13 +4,61 @@ description: レビュー指摘に基づいてコードを修正
 model: sonnet
 context: fork
 disable-model-invocation: true
+argument-hint: "<task_name> [--team]"
 ---
 
 # タスクの修正実行
 
 あなたは経験豊富なソフトウェア開発者です。コードレビューの指摘事項に基づいて、コードを修正します。
 
-タスク「$ARGUMENTS」の修正を開始します。
+タスク「$ARGUMENTS[0]」の修正を開始します。
+
+## 引数の解釈
+
+このスキルは以下の引数を受け取ります:
+
+- **第1引数（タスク名）**: `$ARGUMENTS[0]` — 必須。処理対象のタスク名。
+- **オプション**: 第2引数以降に `--team` などのフラグが指定される場合があります。
+
+### オプション一覧
+
+| オプション | 説明 |
+|-----------|------|
+| `--team` | Agent Teams を有効化し、チームメイトと協調して作業を実行します |
+
+**引数全体**: `$ARGUMENTS`
+
+上記の引数全体の中に `--team` という文字列が含まれているかを確認してください。
+含まれている場合は Agent Teams モードで実行します。含まれていない場合は通常の単一エージェントモードで実行します。
+
+## Agent Teams モード
+
+**このセクションは `--team` オプションが指定された場合のみ有効です。**
+`--team` が指定されていない場合、このセクション全体を無視して従来通り単一エージェントで作業してください。
+
+### 前提条件の確認
+
+Agent Teams を使用するには、環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が有効になっている必要があります。
+有効でない場合は、以下のメッセージを表示して通常の単一エージェント実行にフォールバックしてください:
+
+「⚠️ Agent Teams が有効化されていません。`~/.claude/settings.json` の `env` フィールドに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を設定してください。今回は通常モードで実行します。」
+
+### ⚠️ コストに関する注意
+
+Agent Teams はトークン消費が大幅に増加します。チームメイトの生成・管理に伴い、通常の2〜5倍のトークンを消費する可能性があります。
+
+### チーム編成と作業分担
+
+review.md の指摘事項を分析し、**独立して修正できる指摘群**を特定してください。
+
+チームメイトに以下のように作業を分担してください:
+
+- **並行修正**: 異なるファイルに関する修正は異なるチームメイトに割り当て
+- **順次修正**: 同じファイルに関する修正や依存関係がある修正はチームリード（あなた）が順次実施
+
+**重要**: 各チームメイトが同じファイルを同時に編集しないよう注意してください。
+
+チームリード（あなた）は全チームメイトの修正結果を統合し、動作確認を行った上で fix-result.md を作成してください。
 
 ## パス解決ルール
 
@@ -20,14 +68,14 @@ disable-model-invocation: true
 以降のすべてのファイルパスは、取得したプロジェクトルートを先頭に付けた絶対パスで指定してください。
 
 例: `pwd` → `/Users/yuki/dev/www/my-project` の場合
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/fix-result.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS/fix-result.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/fix-result.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS[0]/fix-result.md`
 
 ## 手順
 
 ### ステップ1: ファイル読み込み
 Readツールで以下のファイルを読み込み、修正方針を確認してください:
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/review.md`
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/design.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/review.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/design.md`
 
 ### ステップ2: 修正実施
 review.md の修正方針と指摘事項に従って、コードを修正してください。
@@ -40,7 +88,7 @@ review.md の修正方針と指摘事項に従って、コードを修正して�
 Readツールで `~/.claude/skills/task-fix/templates/fix-result-template.md` を読み込み、報告書のフォーマットを確認してください。
 
 ### ステップ4: 修正報告書作成
-Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/fix-result.md` を作成してください。テンプレートに従い、メタ情報セクションに実行モデル名と実行日時を正確に記入してください。
+Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/fix-result.md` を作成してください。テンプレートに従い、メタ情報セクションに実行モデル名と実行日時を正確に記入してください。
 
 ## Serena MCP対応
 

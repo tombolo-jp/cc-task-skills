@@ -4,13 +4,62 @@ description: 詳細設計とToDoリストに基づいて開発を実行
 model: sonnet
 context: fork
 disable-model-invocation: true
+argument-hint: "<task_name> [--team]"
 ---
 
 # タスクの開発実行
 
 あなたは経験豊富なソフトウェア開発者です。詳細設計とToDoリストに基づいて開発を進めます。
 
-タスク「$ARGUMENTS」の開発を開始します。
+タスク「$ARGUMENTS[0]」の開発を開始します。
+
+## 引数の解釈
+
+このスキルは以下の引数を受け取ります:
+
+- **第1引数（タスク名）**: `$ARGUMENTS[0]` — 必須。処理対象のタスク名。
+- **オプション**: 第2引数以降に `--team` などのフラグが指定される場合があります。
+
+### オプション一覧
+
+| オプション | 説明 |
+|-----------|------|
+| `--team` | Agent Teams を有効化し、チームメイトと協調して作業を実行します |
+
+**引数全体**: `$ARGUMENTS`
+
+上記の引数全体の中に `--team` という文字列が含まれているかを確認してください。
+含まれている場合は Agent Teams モードで実行します。含まれていない場合は通常の単一エージェントモードで実行します。
+
+## Agent Teams モード
+
+**このセクションは `--team` オプションが指定された場合のみ有効です。**
+`--team` が指定されていない場合、このセクション全体を無視して従来通り単一エージェントで作業してください。
+
+### 前提条件の確認
+
+Agent Teams を使用するには、環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が有効になっている必要があります。
+有効でない場合は、以下のメッセージを表示して通常の単一エージェント実行にフォールバックしてください:
+
+「⚠️ Agent Teams が有効化されていません。`~/.claude/settings.json` の `env` フィールドに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を設定してください。今回は通常モードで実行します。」
+
+### ⚠️ コストに関する注意
+
+Agent Teams はトークン消費が大幅に増加します。チームメイトの生成・管理に伴い、通常の2〜5倍のトークンを消費する可能性があります。
+
+### チーム編成と作業分担
+
+todo.md の依存関係を分析し、**独立して並行実装できるタスク群**を特定してください。
+
+チームメイトに以下のように作業を分担してください:
+
+- **並行実装**: 依存関係がないタスクは異なるチームメイトに割り当てて並行実装
+- **順次実装**: 依存関係があるタスクはチームリード（あなた）が順次実装
+- **各チームメイトへの指示**: 対象ファイル、実装内容、コーディング規約を明確に伝達
+
+**重要**: 各チームメイトが同じファイルを同時に編集しないよう、ファイル単位で作業を分割してください。
+
+チームリード（あなた）は全チームメイトの成果を統合し、動作確認を行った上で dev-result.md を作成してください。
 
 ## パス解決ルール
 
@@ -20,20 +69,20 @@ disable-model-invocation: true
 以降のすべてのファイルパスは、取得したプロジェクトルートを先頭に付けた絶対パスで指定してください。
 
 例: `pwd` → `/Users/yuki/dev/www/my-project` の場合
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/dev-result.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS/dev-result.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/dev-result.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS[0]/dev-result.md`
 
 ## 手順
 
 ### ステップ1: ファイル読み込み
 Readツールで以下のファイルを読み込み、設計とタスク内容を確認してください:
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/design.md`
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/todo.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/design.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/todo.md`
 
 ### ステップ2: テンプレート読み込み
 Readツールで `~/.claude/skills/task-dev/templates/dev-result-template.md` を読み込み、報告書のフォーマットを確認してください。
 
 ### ステップ3: 報告書初期化
-Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/dev-result.md` を作成し、テンプレートを基にtodo.mdからチェックリスト形式で抽出した内容で初期化してください。
+Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/dev-result.md` を作成し、テンプレートを基にtodo.mdからチェックリスト形式で抽出した内容で初期化してください。
 
 ### ステップ4: 実装
 ToDoリストの順序に従って実装を進めてください。

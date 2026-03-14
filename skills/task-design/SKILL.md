@@ -4,13 +4,58 @@ description: タスクの詳細設計を作成
 model: opus
 context: fork
 disable-model-invocation: true
+argument-hint: "<task_name> [--team]"
 ---
 
 # タスクの詳細設計
 
 あなたは経験豊富なソフトウェアアーキテクトです。要件に基づいて詳細設計を作成します。
 
-タスク「$ARGUMENTS」の詳細設計を作成します。
+タスク「$ARGUMENTS[0]」の詳細設計を作成します。
+
+## 引数の解釈
+
+このスキルは以下の引数を受け取ります:
+
+- **第1引数（タスク名）**: `$ARGUMENTS[0]` — 必須。処理対象のタスク名。
+- **オプション**: 第2引数以降に `--team` などのフラグが指定される場合があります。
+
+### オプション一覧
+
+| オプション | 説明 |
+|-----------|------|
+| `--team` | Agent Teams を有効化し、チームメイトと協調して作業を実行します |
+
+**引数全体**: `$ARGUMENTS`
+
+上記の引数全体の中に `--team` という文字列が含まれているかを確認してください。
+含まれている場合は Agent Teams モードで実行します。含まれていない場合は通常の単一エージェントモードで実行します。
+
+## Agent Teams モード
+
+**このセクションは `--team` オプションが指定された場合のみ有効です。**
+`--team` が指定されていない場合、このセクション全体を無視して従来通り単一エージェントで作業してください。
+
+### 前提条件の確認
+
+Agent Teams を使用するには、環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が有効になっている必要があります。
+有効でない場合は、以下のメッセージを表示して通常の単一エージェント実行にフォールバックしてください:
+
+「⚠️ Agent Teams が有効化されていません。`~/.claude/settings.json` の `env` フィールドに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を設定してください。今回は通常モードで実行します。」
+
+### ⚠️ コストに関する注意
+
+Agent Teams はトークン消費が大幅に増加します。チームメイトの生成・管理に伴い、通常の2〜5倍のトークンを消費する可能性があります。
+
+### チーム編成と作業分担
+
+チームメイトに以下の並行分析を依頼してください:
+
+1. **データ設計担当**: データモデル、スキーマ変更、データフローの設計
+2. **API・インターフェース設計担当**: API エンドポイント、インターフェース、入出力の設計
+3. **セキュリティ・パフォーマンス担当**: セキュリティ考慮事項、パフォーマンス最適化、エラーハンドリング方針の設計
+
+チームリード（あなた）は各担当の設計を統合し、整合性を確認した上で最終的な design.md を作成してください。
 
 ## パス解決ルール
 
@@ -20,18 +65,18 @@ disable-model-invocation: true
 以降のすべてのファイルパスは、取得したプロジェクトルートを先頭に付けた絶対パスで指定してください。
 
 例: `pwd` → `/Users/yuki/dev/www/my-project` の場合
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/design.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS/design.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/design.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS[0]/design.md`
 
 ## 手順
 
 ### ステップ1: 要件確認
-Readツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/req.md` を読み込み、要件を確認してください。
+Readツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/req.md` を読み込み、要件を確認してください。
 
 ### ステップ2: プロジェクト分析
 Glob/Grep/Readツールで既存プロジェクトの構造を分析してください（整合性と保守性を考慮）。
 
 ### ステップ3: 設計書作成
-Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/design.md` を作成し、以下の内容を含めてください:
+Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/design.md` を作成し、以下の内容を含めてください:
 
 - **既存システムの影響分析**: どの部分に影響するか
 - **アーキテクチャ設計**: 全体的な構成
@@ -58,3 +103,4 @@ Serena MCPツールが利用可能な場合は優先的に活用してくださ�
 - 実行モデル: [あなたが動作しているモデル名を正確に記載]
 - 実行日時: [現在の日時]
 - コンテキスト: fork
+- Agent Teams: 有効 / 無効

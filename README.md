@@ -37,7 +37,42 @@ Claude Codeで段階的な開発ワークフローを支援するカスタムス
 - 実行モデル: Claude Opus 4.6
 - 実行日時: 2026-03-12 10:30:00
 - コンテキスト: fork
+- Agent Teams: 有効 / 無効
 ```
+
+## Agent Teams オプション
+
+task-init を除く全スキルは `--team` オプションに対応しています。このオプションを使うと、Claude Code の Agent Teams 機能を活用して複数のエージェントが並行して作業します。
+
+### 有効化方法
+
+`~/.claude/settings.json` に以下を追加してください:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+### 使用例
+
+```bash
+/task-req my-task --team      # 市場リサーチ・影響分析を並行実施
+/task-design my-task --team   # データ設計・API設計・セキュリティ設計を並行実施
+/task-todo my-task --team     # タスク分解・工数見積もりを並行実施
+/task-dev my-task --team      # 独立したタスクを並行実装
+/task-review my-task --team   # 要件整合性・コード品質・セキュリティを並行レビュー
+/task-fix my-task --team      # 独立した修正箇所を並行修正
+/task-verify my-task --team   # 正常系・異常系・非機能の検証設計を並行実施
+```
+
+### コストに関する注意
+
+Agent Teams はトークン消費が大幅に増加します（通常の2〜5倍）。必要な場合にのみ使用してください。
+
+`--team` なしの従来の呼び出し方法は引き続き動作します（後方互換）。
 
 ## Serena MCP対応
 
@@ -72,6 +107,7 @@ cp -r cc-task-skills/skills/* ~/.claude/skills/
 #### 2. **要件定義作成** `/task-req`
 ```bash
 /task-req your-task-name
+/task-req your-task-name --team   # Agent Teams モード（市場リサーチ・影響分析を並行実施）
 ```
 - **機能**: 入力された要件から要件定義書を作成
 - **用途**: 曖昧な要求を構造化された要件に変換
@@ -84,6 +120,7 @@ cp -r cc-task-skills/skills/* ~/.claude/skills/
 #### 3. **詳細設計** `/task-design`
 ```bash
 /task-design your-task-name
+/task-design your-task-name --team   # Agent Teams モード（データ設計・API設計・セキュリティ設計を並行実施）
 ```
 - **機能**: 既存システムを分析し、詳細設計を作成
 - **用途**: 要件定義後の技術的設計
@@ -95,6 +132,7 @@ cp -r cc-task-skills/skills/* ~/.claude/skills/
 #### 4. **ToDoリストと工数見積もり作成** `/task-todo`
 ```bash
 /task-todo your-task-name
+/task-todo your-task-name --team   # Agent Teams モード（タスク分解・工数見積もりを並行実施）
 ```
 - **機能**: 詳細設計に基づく実装作業のタスクを分解し、リスクの不確実性を考慮した工数見積もりを実施
 - **用途**: 開発作業の具体的な計画立案と中級プログラマが手作業で実装する場合の工数算出（最少〜最大の範囲表示）
@@ -106,6 +144,7 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 #### 5. **開発実行** `/task-dev`
 ```bash
 /task-dev your-task-name
+/task-dev your-task-name --team   # Agent Teams モード（独立したタスクを並行実装）
 ```
 - **機能**: ToDoリストに基づく段階的な実装と開発完了報告書の作成
 - **用途**: 実際の開発作業の実行
@@ -120,6 +159,7 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 #### 6. **コードレビュー** `/task-review`
 ```bash
 /task-review your-task-name
+/task-review your-task-name --team   # Agent Teams モード（要件整合性・コード品質・セキュリティを並行レビュー）
 ```
 - **機能**: 要件定義・設計書・ToDoリストと照合し、実装コードの品質を検証
 - **用途**: 開発完了後のコードレビュー
@@ -132,6 +172,7 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 #### 7. **修正実行** `/task-fix`
 ```bash
 /task-fix your-task-name
+/task-fix your-task-name --team   # Agent Teams モード（独立した修正箇所を並行修正）
 ```
 - **機能**: レビュー指摘に基づいてコードを修正
 - **用途**: コードレビュー後の修正作業
@@ -144,6 +185,7 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 #### 8. **手動検証** `/task-verify`
 ```bash
 /task-verify your-task-name
+/task-verify your-task-name --team   # Agent Teams モード（正常系・異常系・非機能の検証設計を並行実施）
 ```
 - **機能**: 開発成果物に対する手動検証手順書を生成
 - **用途**: 開発・修正完了後の手動検証

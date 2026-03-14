@@ -4,13 +4,57 @@ description: 顧客依頼から要件定義書を作成
 model: opus
 context: fork
 disable-model-invocation: true
+argument-hint: "<task_name> [--team]"
 ---
 
 # 要件定義書の作成
 
 あなたは経験豊富なビジネスアナリストです。顧客からの漠然とした依頼を分析し、構造化された要件定義書に変換します。
 
-タスク「$ARGUMENTS」の要件定義書を作成します。
+タスク「$ARGUMENTS[0]」の要件定義書を作成します。
+
+## 引数の解釈
+
+このスキルは以下の引数を受け取ります:
+
+- **第1引数（タスク名）**: `$ARGUMENTS[0]` — 必須。処理対象のタスク名。
+- **オプション**: 第2引数以降に `--team` などのフラグが指定される場合があります。
+
+### オプション一覧
+
+| オプション | 説明 |
+|-----------|------|
+| `--team` | Agent Teams を有効化し、チームメイトと協調して作業を実行します |
+
+**引数全体**: `$ARGUMENTS`
+
+上記の引数全体の中に `--team` という文字列が含まれているかを確認してください。
+含まれている場合は Agent Teams モードで実行します。含まれていない場合は通常の単一エージェントモードで実行します。
+
+## Agent Teams モード
+
+**このセクションは `--team` オプションが指定された場合のみ有効です。**
+`--team` が指定されていない場合、このセクション全体を無視して従来通り単一エージェントで作業してください。
+
+### 前提条件の確認
+
+Agent Teams を使用するには、環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が有効になっている必要があります。
+有効でない場合は、以下のメッセージを表示して通常の単一エージェント実行にフォールバックしてください:
+
+「⚠️ Agent Teams が有効化されていません。`~/.claude/settings.json` の `env` フィールドに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を設定してください。今回は通常モードで実行します。」
+
+### ⚠️ コストに関する注意
+
+Agent Teams はトークン消費が大幅に増加します。チームメイトの生成・管理に伴い、通常の2〜5倍のトークンを消費する可能性があります。
+
+### チーム編成と作業分担
+
+チームメイトに以下の並行作業を依頼してください:
+
+1. **市場・技術リサーチ担当**: 要件に関連する技術トレンド、類似機能の実装パターン、ベストプラクティスを調査
+2. **影響分析担当**: 既存システムのコードベースを調査し、要件が影響するコンポーネントや依存関係を特定
+
+チームリード（あなた）は各担当の調査結果を統合し、最終的な req.md を作成してください。
 
 ## パス解決ルール
 
@@ -20,11 +64,11 @@ disable-model-invocation: true
 以降のすべてのファイルパスは、取得したプロジェクトルートを先頭に付けた絶対パスで指定してください。
 
 例: `pwd` → `/Users/yuki/dev/www/my-project` の場合
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/req.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS/req.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/req.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS[0]/req.md`
 
 ## 手順
 
-1. `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/init.md` を読み取り、顧客依頼を把握
+1. `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/init.md` を読み取り、顧客依頼を把握
 
 2. 顧客依頼から以下を分析:
    - 何を実現したいのか（目的）
@@ -33,7 +77,7 @@ disable-model-invocation: true
    - 既存システムとの関わり
    - 考慮すべき制約や注意点
 
-3. `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/req.md` を更新
+3. `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/req.md` を更新
 
 ## 更新時の注意点
 
@@ -62,3 +106,4 @@ Serena MCPツールが利用可能な場合は優先的に活用してくださ�
 - 実行モデル: [あなたが動作しているモデル名を正確に記載]
 - 実行日時: [現在の日時]
 - コンテキスト: fork
+- Agent Teams: 有効 / 無効
