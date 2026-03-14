@@ -23,17 +23,27 @@ disable-model-invocation: true
 
 タスク「$ARGUMENTS」の手動検証手順書を作成します。
 
+## パス解決ルール
+
+**重要**: タスクファイルはプロジェクトルート配下に格納されています（`~/.claude/tasks/` ではありません）。
+
+最初に Bash ツールで `pwd` を実行し、プロジェクトルートの絶対パスを取得してください。
+以降のすべてのファイルパスは、取得したプロジェクトルートを先頭に付けた絶対パスで指定してください。
+
+例: `pwd` → `/Users/yuki/dev/www/my-project` の場合
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/verify.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS/verify.md`
+
 ## 手順
 
 ### ステップ1: ファイル読み込み
 Readツールで以下のファイルを読み込み、検証対象の全体像を把握してください:
-- `.claude/tasks/$ARGUMENTS/req.md`（何が求められたか）
-- `.claude/tasks/$ARGUMENTS/design.md`（どう作る設計か）
-- `.claude/tasks/$ARGUMENTS/dev-result.md`（何を実装したか・変更ファイル一覧）
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/req.md`（何が求められたか）
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/design.md`（どう作る設計か）
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/dev-result.md`（何を実装したか・変更ファイル一覧）
 
 以下のファイルが存在する場合は追加で読み込んでください:
-- `.claude/tasks/$ARGUMENTS/review.md`（レビュー指摘があったか）
-- `.claude/tasks/$ARGUMENTS/fix-result.md`（修正で何が変わったか）
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/review.md`（レビュー指摘があったか）
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/fix-result.md`（修正で何が変わったか）
 
 ### ステップ2: 実装コードの確認
 dev-result.md（およびfix-result.md）の変更ファイル一覧を参照し、Glob/Grep/Readツールで実際のコードを確認してください。以下を特定します:
@@ -61,7 +71,7 @@ dev-result.md（およびfix-result.md）の変更ファイル一覧を参照し
 Readツールで `~/.claude/skills/task-verify/templates/verify-template.md` を読み込み、手順書のフォーマットを参考にしてください。テンプレートはあくまで参考です。タスクの性質に合わせて手順書の構成・セクション・粒度を柔軟に最適化してください。
 
 ### ステップ5: 検証手順書作成
-Writeツールで `.claude/tasks/$ARGUMENTS/verify.md` を作成してください。
+Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/verify.md` を作成してください。
 
 作成時の必須ルール:
 - **全ステップにチェックボックス `- [ ]` を付ける**

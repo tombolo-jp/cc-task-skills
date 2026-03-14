@@ -12,18 +12,28 @@ disable-model-invocation: true
 
 タスク「$ARGUMENTS」の開発を開始します。
 
+## パス解決ルール
+
+**重要**: タスクファイルはプロジェクトルート配下に格納されています（`~/.claude/tasks/` ではありません）。
+
+最初に Bash ツールで `pwd` を実行し、プロジェクトルートの絶対パスを取得してください。
+以降のすべてのファイルパスは、取得したプロジェクトルートを先頭に付けた絶対パスで指定してください。
+
+例: `pwd` → `/Users/yuki/dev/www/my-project` の場合
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/dev-result.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS/dev-result.md`
+
 ## 手順
 
 ### ステップ1: ファイル読み込み
 Readツールで以下のファイルを読み込み、設計とタスク内容を確認してください:
-- `.claude/tasks/$ARGUMENTS/design.md`
-- `.claude/tasks/$ARGUMENTS/todo.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/design.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/todo.md`
 
 ### ステップ2: テンプレート読み込み
 Readツールで `~/.claude/skills/task-dev/templates/dev-result-template.md` を読み込み、報告書のフォーマットを確認してください。
 
 ### ステップ3: 報告書初期化
-Writeツールで `.claude/tasks/$ARGUMENTS/dev-result.md` を作成し、テンプレートを基にtodo.mdからチェックリスト形式で抽出した内容で初期化してください。
+Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/dev-result.md` を作成し、テンプレートを基にtodo.mdからチェックリスト形式で抽出した内容で初期化してください。
 
 ### ステップ4: 実装
 ToDoリストの順序に従って実装を進めてください。

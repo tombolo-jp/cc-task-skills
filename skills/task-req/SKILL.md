@@ -12,9 +12,19 @@ disable-model-invocation: true
 
 タスク「$ARGUMENTS」の要件定義書を作成します。
 
+## パス解決ルール
+
+**重要**: タスクファイルはプロジェクトルート配下に格納されています（`~/.claude/tasks/` ではありません）。
+
+最初に Bash ツールで `pwd` を実行し、プロジェクトルートの絶対パスを取得してください。
+以降のすべてのファイルパスは、取得したプロジェクトルートを先頭に付けた絶対パスで指定してください。
+
+例: `pwd` → `/Users/yuki/dev/www/my-project` の場合
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/req.md` → `/Users/yuki/dev/www/my-project/.claude/tasks/$ARGUMENTS/req.md`
+
 ## 手順
 
-1. `.claude/tasks/$ARGUMENTS/init.md` を読み取り、顧客依頼を把握
+1. `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/init.md` を読み取り、顧客依頼を把握
 
 2. 顧客依頼から以下を分析:
    - 何を実現したいのか（目的）
@@ -23,7 +33,7 @@ disable-model-invocation: true
    - 既存システムとの関わり
    - 考慮すべき制約や注意点
 
-3. `.claude/tasks/$ARGUMENTS/req.md` を更新
+3. `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS/req.md` を更新
 
 ## 更新時の注意点
 
