@@ -2,7 +2,6 @@
 name: task-init
 description: タスク環境の初期化
 model: haiku
-context: fork
 disable-model-invocation: true
 allowed-tools: Write, Bash(mkdir:*), Bash(pwd)
 ---
