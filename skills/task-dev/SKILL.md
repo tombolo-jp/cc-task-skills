@@ -1,7 +1,7 @@
 ---
 name: task-dev
 description: 詳細設計とToDoリストに基づいて開発を実行
-model: sonnet
+model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [--team]"
 ---

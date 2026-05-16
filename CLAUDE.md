@@ -48,12 +48,12 @@ Each skill specifies an appropriate model alias via Frontmatter for optimal cost
 | task-req | **Opus** | `opus` | High-precision design required |
 | task-design | **Opus** | `opus` | High-precision design required |
 | task-todo | **Opus** | `opus` | High-precision planning and estimation |
-| task-dev | **Sonnet** | `sonnet` | Balance of cost and precision for implementation |
+| task-dev | **Opus** | `opus` | High-precision implementation; avoids Sonnet 1M context API requirement |
 | task-review | **Opus** | `opus` | High-precision review required |
-| task-fix | **Sonnet** | `sonnet` | Balance of cost and precision for fixes |
+| task-fix | **Opus** | `opus` | High-precision fixes; avoids Sonnet 1M context API requirement |
 | task-verify | **Opus** | `opus` | High-precision verification procedure generation |
 
-Model aliases (`haiku`, `sonnet`, `opus`) are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models.
+Model aliases (`haiku`, `opus`) are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models. The `sonnet` alias is intentionally avoided because Claude Code currently requires an API key for Sonnet's 1M context window, while Opus 1M is included in Pro/Max subscriptions without extra charge.
 
 ## モデル確認の仕組み
 
@@ -326,7 +326,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-04-28 00:00:00
+最終更新: 2026-05-16 00:00:00
+更新内容: task-dev と task-fix のモデルを `sonnet` から `opus` に変更。Claude Code の最近の仕様変更により Sonnet の 1M context が API キー必須となりエラーが発生していたため、Pro/Max プランに 1M が包含されている Opus へ統一。これで Skills の使用モデルは `haiku`（task-init のみ）と `opus`（残り 7 スキル）の 2 種類となる。CLAUDE.md の Model Configuration 表とエイリアス補足文を更新、README.md の同等記述も同期。
+
+前回更新: 2026-04-28 00:00:00
 更新内容: team4 — Skills 経由で Agent Teams が成立しない問題を修正。8スキル全てのフロントマターから `context: fork` を削除し、メイン会話で実行する形態に変更。これにより `Agent` ツール（チームメイト spawn 用）がスキル実行時にも利用可能となり、Agent Teams が本来の意図通り動作する。3 SKILL.md 本文（task-todo, task-req, task-design）と 4 テンプレート（fix-result, review, dev-result, verify）のメタ情報セクションから `- コンテキスト: fork` 行を削除。CLAUDE.md の「モデル確認の仕組み」「Agent Teams オプション」節を更新し、メイン会話実行に伴うコンテキストウィンドウ消費の注意書きを追加。README.md にも同期更新を実施。
 
 前回更新: 2026-04-27 12:00:00

@@ -1,7 +1,7 @@
 ---
 name: task-fix
 description: レビュー指摘に基づいてコードを修正
-model: sonnet
+model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [--team]"
 ---
