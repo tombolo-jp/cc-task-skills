@@ -85,13 +85,6 @@ Model aliases (`haiku`, `opus`) are used instead of full model IDs. This ensures
 現在のコマンドはすべてファイル書き込みを伴うため、`agent` フィールドは指定していません（デフォルトの汎用エージェント）。
 将来的にread-only分析コマンドを追加する場合は、`agent: Explore` の指定を検討してください。
 
-## Serena MCP Integration
-
-All skills support Serena MCP (Model Context Protocol). When Serena MCP tools are available, skills will:
-- Automatically detect and utilize Serena MCP capabilities
-- Prioritize Serena MCP functions for document generation, analysis, and validation
-- Fall back to traditional methods when Serena MCP is unavailable
-
 ## Key Skill Behaviors
 
 ### /task-init {task_name}
@@ -99,21 +92,18 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Creates init.md for capturing raw customer requests
 - Generates templated req.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
 - Note: design.md, todo.md, dev-result.md, review.md, fix-result.md, verify.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix, task-verify)
-- **Serena MCP**: Utilizes Serena MCP for file creation and template generation when available
 
 ### /task-req {task_name} [--team]
 - Reads raw customer requests from init.md
 - Analyzes and structures the information into req.md
 - Creates a draft requirements document from ambiguous requests
 - **`--team` option**: Deploys a market/tech research agent and an impact analysis agent in parallel; team lead integrates results into req.md
-- **Serena MCP**: Utilizes Serena MCP for requirements analysis and document generation when available
 
 ### /task-design {task_name} [--team]
 - Reads req.md to understand task scope
 - Analyzes existing project structure to maintain consistency
 - Creates comprehensive design.md covering architecture, components, file structure, data design, API design, error handling, testing strategy, and performance/security considerations
 - **`--team` option**: Deploys data design, API/interface design, and security/performance agents in parallel; team lead integrates results into design.md
-- **Serena MCP**: Utilizes Serena MCP for design document creation, analysis, and validation when available
 
 ### /task-todo {task_name} [--team]
 - Reads req.md and design.md to understand technical requirements
@@ -123,7 +113,6 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Includes risk factors, buffers, and realistic time estimates for each task
 - Considers dependencies and development efficiency
 - **`--team` option**: Deploys a task decomposition agent and an effort estimation agent in parallel; team lead integrates results into todo.md
-- **Serena MCP**: Utilizes Serena MCP for task analysis, effort estimation, and document generation when available
 
 ### /task-dev {task_name} [--team]
 - Reads design.md and todo.md to understand implementation requirements
@@ -133,7 +122,6 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Reports progress after each task completion
 - Creates dev-result.md with implementation overview, changed files, technical details, and completion report
 - **`--team` option**: Analyzes todo.md dependencies and assigns independent tasks to parallel agents; file-level work splitting prevents concurrent edit conflicts
-- **Serena MCP**: Utilizes Serena MCP for code generation, implementation, testing, and validation when available
 
 ### /task-review {task_name} [--team]
 - Reads req.md, design.md, todo.md, and dev-result.md to understand full context
@@ -142,7 +130,6 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Evaluates code quality (readability, maintainability, security, error handling, tests)
 - Creates review.md with overall judgment (no fix needed / fix recommended / fix required) and detailed findings
 - **`--team` option**: Deploys requirements/design consistency, code quality, and security/robustness reviewers in parallel; team lead deduplicates and prioritizes findings
-- **Serena MCP**: Utilizes Serena MCP for code analysis and review when available
 
 ### /task-fix {task_name} [--team]
 - Reads review.md and design.md to understand required fixes
@@ -150,7 +137,6 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Implements code fixes based on review feedback while maintaining design consistency
 - Creates fix-result.md with fix details, changed files, and verification results
 - **`--team` option**: Assigns independent fixes to parallel agents by file; sequential fixes handled by team lead to avoid conflicts
-- **Serena MCP**: Utilizes Serena MCP for code fixes and validation when available
 
 ### /task-verify {task_name} [--team]
 - Reads req.md, design.md, and dev-result.md for full context
@@ -161,7 +147,6 @@ All skills support Serena MCP (Model Context Protocol). When Serena MCP tools ar
 - Prioritizes quick-win steps first to lower psychological barriers
 - Includes exact commands, URLs, test data, and expected results
 - **`--team` option**: Deploys happy-path, edge-case/error, and non-functional/regression verification designers in parallel; team lead integrates into Quick Win-first ordering
-- **Serena MCP**: Utilizes Serena MCP for code analysis and verification procedure generation when available
 
 ## Agent Teams オプション
 
@@ -327,6 +312,9 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 ## 更新履歴
 
 最終更新: 2026-05-16 00:00:00
+更新内容: Serena MCP 対応を全スキルから削除。7つの SKILL.md（task-design, task-dev, task-fix, task-req, task-review, task-todo, task-verify）から `## Serena MCP対応` セクションを削除。CLAUDE.md の `## Serena MCP Integration` 節および各スキル説明の `- **Serena MCP**:` 行を削除。Skills 側で MCP 提供元に依存する記述を排除し、ツール非依存のシンプルな構成に統一。
+
+前回更新: 2026-05-16 00:00:00
 更新内容: task-dev と task-fix のモデルを `sonnet` から `opus` に変更。Claude Code の最近の仕様変更により Sonnet の 1M context が API キー必須となりエラーが発生していたため、Pro/Max プランに 1M が包含されている Opus へ統一。これで Skills の使用モデルは `haiku`（task-init のみ）と `opus`（残り 7 スキル）の 2 種類となる。CLAUDE.md の Model Configuration 表とエイリアス補足文を更新、README.md の同等記述も同期。
 
 前回更新: 2026-04-28 00:00:00

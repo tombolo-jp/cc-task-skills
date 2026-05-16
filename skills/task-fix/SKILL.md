@@ -182,10 +182,6 @@ Readツールで `~/.claude/skills/task-fix/templates/fix-result-template.md` �
 ### ステップ4: 修正報告書作成
 Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/fix-result.md` を作成してください。テンプレートに従い、メタ情報セクションに実行モデル名・実行日時・Agent Teams の値（有効 / 無効（指定なし） / 無効（フォールバック））を正確に記入してください。
 
-## Serena MCP対応
-
-Serena MCPツールが利用可能な場合は優先的に活用してください。
-
 ## 完了後
 
 「修正作業が完了しました。fix-result.md に修正結果を作成しました。」と表示してください。
