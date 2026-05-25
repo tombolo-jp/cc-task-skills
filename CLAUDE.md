@@ -13,7 +13,7 @@ The repository contains 8 interconnected skills that work together (task-init ex
 1. **task-design** - Analyzes existing systems and creates technical design. Supports `--team` option.
 2. **task-dev** - Executes implementation based on todo list and creates development report. Supports `--team` option.
 3. **task-fix** - Fixes code based on review feedback. Supports `--team` option.
-4. **task-init** - Creates task environment and requirements gathering. (No `--team` support — uses haiku model)
+4. **task-init** - Creates task environment and requirements gathering. Optionally fetches task content from a URL into init.md. (No `--team` support)
 5. **task-req** - Creates requirements draft from raw customer requests. Supports `--team` option.
 6. **task-review** - Reviews implementation against requirements, design, and code quality. Supports `--team` option.
 7. **task-todo** - Breaks down design into actionable development tasks with effort estimation. Supports `--team` option.
@@ -44,7 +44,7 @@ Each skill specifies an appropriate model alias via Frontmatter for optimal cost
 
 | Skill | Model | Alias | Reason |
 |-------|-------|-------|--------|
-| task-init | **Haiku** | `haiku` | Simple file creation, cost reduction |
+| task-init | **Opus** | `opus` | URL content fetching (MCP/browser), verbatim transcription, summarization |
 | task-req | **Opus** | `opus` | High-precision design required |
 | task-design | **Opus** | `opus` | High-precision design required |
 | task-todo | **Opus** | `opus` | High-precision planning and estimation |
@@ -53,7 +53,7 @@ Each skill specifies an appropriate model alias via Frontmatter for optimal cost
 | task-fix | **Opus** | `opus` | High-precision fixes; avoids Sonnet 1M context API requirement |
 | task-verify | **Opus** | `opus` | High-precision verification procedure generation |
 
-Model aliases (`haiku`, `opus`) are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models. The `sonnet` alias is intentionally avoided because Claude Code currently requires an API key for Sonnet's 1M context window, while Opus 1M is included in Pro/Max subscriptions without extra charge.
+Model aliases are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models. All 8 skills now use the `opus` alias. The `sonnet` alias is intentionally avoided because Claude Code currently requires an API key for Sonnet's 1M context window, while Opus 1M is included in Pro/Max subscriptions without extra charge. (task-init was previously `haiku`, but was upgraded to `opus` when URL content fetching/transcription/summarization was added — see Key Skill Behaviors.)
 
 ## モデル確認の仕組み
 
@@ -87,10 +87,15 @@ Model aliases (`haiku`, `opus`) are used instead of full model IDs. This ensures
 
 ## Key Skill Behaviors
 
-### /task-init {task_name}
+### /task-init {task_name} [URL]
 - Creates `.claude/tasks/{task_name}/` directory structure
 - Creates init.md for capturing raw customer requests
 - Generates templated req.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
+- **URL argument (optional, 2nd positional)**: When a URL is provided (e.g., a Backlog/GitHub/Jira ticket or any web page), fetches the page and transcribes its **body and all comments verbatim** into init.md, saves any attachments to the `attachments/` subdirectory, and appends a **summary** section at the end of init.md
+  - **Fetch method**: prefers MCP (service-specific MCP detected via ToolSearch by URL domain), falling back to a **browser-first chain** (claude-in-chrome → chrome-devtools → Playwright → WebFetch)
+  - **No fetch method available**: returns an error and exits **without creating init.md or the task directory** (the fetch-method decision happens before `mkdir`)
+  - **Partial fetch**: if some content (attachments/comments) cannot be obtained due to the method's limits, processing continues and the missing items are explicitly noted inside init.md
+  - **URL quoting**: single quotes are recommended (URLs contain `?`/`&`/`#`); the skill strips surrounding quotes if present
 - Note: design.md, todo.md, dev-result.md, review.md, fix-result.md, verify.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix, task-verify)
 
 ### /task-req {task_name} [--team]
@@ -311,7 +316,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-05-16 00:00:00
+最終更新: 2026-05-26 00:00:00
+更新内容: task-init に URL からのタスク概要自動取得機能を追加。第2引数に URL（任意）を受け取り、本文＋コメントを改変せず全文転記、添付を `attachments/` サブディレクトリに保存、init.md 末尾に要約セクションを付与する。取得は MCP 優先（URL ドメインから ToolSearch で特化 MCP を検出）→ ブラウザ優先フォールバック（claude-in-chrome → chrome-devtools → Playwright → WebFetch）。取得手段が一つも無い場合は mkdir 前にエラー終了し init.md・ディレクトリを作成しない。部分取得時は取得分で続行し未取得項目を init.md に明記。URL はシングルクォート推奨（前後クォートは除去）。これに伴い task-init のモデルを `haiku` → `opus` に変更（全8スキルが opus に統一、haiku 不使用）。SKILL.md 本文を URL 有無分岐フローに再構成、frontmatter に `argument-hint` 追加・`allowed-tools` 行削除。CLAUDE.md の Skill Architecture / Model Configuration 表 / エイリアス補足文 / Key Skill Behaviors を更新。README.md の task-init 節とファイル構造図を同期更新。
+
+前回更新: 2026-05-16 00:00:00
 更新内容: Serena MCP 対応を全スキルから削除。7つの SKILL.md（task-design, task-dev, task-fix, task-req, task-review, task-todo, task-verify）から `## Serena MCP対応` セクションを削除。CLAUDE.md の `## Serena MCP Integration` 節および各スキル説明の `- **Serena MCP**:` 行を削除。Skills 側で MCP 提供元に依存する記述を排除し、ツール非依存のシンプルな構成に統一。
 
 前回更新: 2026-05-16 00:00:00
