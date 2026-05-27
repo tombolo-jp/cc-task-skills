@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# check_consistency.py の回帰テスト（FR-3 / design §11.2(a)）。
+#
+# 方針:
+#   1. 正常リポジトリ（このリポジトリ自身）を --root で検査 → exit 0 を確認。
+#   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
+#      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
+#
+# 依存: bash / python3 / 標準コマンドのみ（テストフレームワーク不使用）。
+# CI 組込み可: このスクリプトの終了コードが 0 なら全テスト合格。
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+CHECKER="${REPO_ROOT}/scripts/check_consistency.py"
+
+PASS_COUNT=0
+FAIL_COUNT=0
+
+# テンポラリ作業領域（終了時に必ず掃除）。
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/cc-consistency-test.XXXXXX")"
+cleanup() { rm -rf "${WORKDIR}"; }
+trap cleanup EXIT
+
+# 正常リポジトリのスナップショットを作る（.git は除外し git 解決を切る → --root 明示）。
+SNAPSHOT="${WORKDIR}/snapshot"
+mkdir -p "${SNAPSHOT}"
+# 検査対象（skills / CLAUDE.md / README.md）のみコピー。
+cp -R "${REPO_ROOT}/skills" "${SNAPSHOT}/skills"
+cp "${REPO_ROOT}/CLAUDE.md" "${SNAPSHOT}/CLAUDE.md"
+cp "${REPO_ROOT}/README.md" "${SNAPSHOT}/README.md"
+
+# 期待 exit code と、FAIL 時に出力へ含まれているべき文字列を検証するヘルパ。
+#   $1: テスト名
+#   $2: 検査対象ルート
+#   $3: 期待 exit code（0 or 1）
+#   $4: （exit 1 の場合）出力に含まれているべき検査ID 文字列。例: "[frontmatter]"
+run_case() {
+  local name="$1" root="$2" expect_code="$3" expect_str="${4:-}"
+  local out code
+  set +e
+  out="$(/usr/bin/python3 "${CHECKER}" --root "${root}" 2>/dev/null)"
+  code=$?
+  set -e
+
+  if [[ "${code}" -ne "${expect_code}" ]]; then
+    echo "✗ FAIL: ${name} — exit code ${code} (期待 ${expect_code})"
+    echo "${out}" | sed 's/^/    /'
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    return
+  fi
+
+  if [[ -n "${expect_str}" ]]; then
+    if ! grep -qF "${expect_str}" <<<"${out}"; then
+      echo "✗ FAIL: ${name} — 出力に '${expect_str}' が含まれない"
+      echo "${out}" | sed 's/^/    /'
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      return
+    fi
+  fi
+
+  echo "✓ PASS: ${name}"
+  PASS_COUNT=$((PASS_COUNT + 1))
+}
+
+# 壊した fixture を作る: SNAPSHOT を新しいディレクトリへ複製して返す。
+make_fixture() {
+  local dir="${WORKDIR}/fix-$1"
+  rm -rf "${dir}"
+  cp -R "${SNAPSHOT}" "${dir}"
+  echo "${dir}"
+}
+
+echo "=== check_consistency.py 回帰テスト ==="
+echo "リポジトリルート: ${REPO_ROOT}"
+echo
+
+# ---------------------------------------------------------------------------
+# (0) 正常系: スナップショットは exit 0
+# ---------------------------------------------------------------------------
+run_case "正常リポジトリ → exit 0" "${SNAPSHOT}" 0
+
+# ---------------------------------------------------------------------------
+# (1) frontmatter: model を opus 以外に書き換える
+# ---------------------------------------------------------------------------
+F="$(make_fixture frontmatter)"
+/usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace("model: opus", "model: sonnet", 1)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "frontmatter 異常（model: sonnet）→ exit 1" "${F}" 1 "[frontmatter]"
+
+# ---------------------------------------------------------------------------
+# (2) common-block: task-review の共通ブロック内文言を1文字変える
+# ---------------------------------------------------------------------------
+F="$(make_fixture common-block)"
+/usr/bin/python3 - "${F}/skills/task-review/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+# 共通ブロック内に必ず存在する文言を改変（句点を変える）。
+t = t.replace("今回は通常モードで実行します。", "今回は通常モードで実行します!", 1)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "common-block 異常（task-review 改変）→ exit 1" "${F}" 1 "[common-block]"
+
+# ---------------------------------------------------------------------------
+# (3) fallback-msg: CLAUDE.md 側のフォールバック文言①を改変
+#     （common-block を壊さないよう CLAUDE.md のみ変更）
+# ---------------------------------------------------------------------------
+F="$(make_fixture fallback-msg)"
+/usr/bin/python3 - "${F}/CLAUDE.md" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().splitlines(keepends=True)
+out = []
+done = False
+for ln in lines:
+    s = ln.strip()
+    if not done and s.startswith("「⚠️ Agent Teams が有効化されていません"):
+        ln = ln.replace("今回は通常モードで実行します。", "今回は通常モードで実行いたします。")
+        done = True
+    out.append(ln)
+open(p, "w", encoding="utf-8").write("".join(out))
+PY
+run_case "fallback-msg 異常（CLAUDE.md 文言①改変）→ exit 1" "${F}" 1 "[fallback-msg]"
+
+# ---------------------------------------------------------------------------
+# (4) env-table: CLAUDE.md 判定表の1セルを改変
+# ---------------------------------------------------------------------------
+F="$(make_fixture env-table)"
+/usr/bin/python3 - "${F}/CLAUDE.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace("| `__UNSET__` | 無効（未設定） |", "| `__UNSET__` | 無効（未定義） |", 1)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "env-table 異常（CLAUDE.md セル改変）→ exit 1" "${F}" 1 "[env-table]"
+
+# ---------------------------------------------------------------------------
+# (5) meta-format: テンプレートの Agent Teams 3値表記を崩す
+# ---------------------------------------------------------------------------
+F="$(make_fixture meta-format)"
+/usr/bin/python3 - "${F}/skills/task-review/templates/review-template.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace(
+    "- Agent Teams: [有効 / 無効（指定なし） / 無効（フォールバック）]",
+    "- Agent Teams: [有効 / 無効]",
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "meta-format 異常（3値表記崩し）→ exit 1" "${F}" 1 "[meta-format]"
+
+# ---------------------------------------------------------------------------
+# (6) env-json: README.md の AGENT_TEAMS 設定行を削除
+# ---------------------------------------------------------------------------
+F="$(make_fixture env-json)"
+/usr/bin/python3 - "${F}/README.md" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().splitlines(keepends=True)
+out = [ln for ln in lines
+       if '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"' not in ln]
+open(p, "w", encoding="utf-8").write("".join(out))
+PY
+run_case "env-json 異常（README.md から削除）→ exit 1" "${F}" 1 "[env-json]"
+
+# ---------------------------------------------------------------------------
+# (7) template-ref: ハードコード絶対パスを SKILL.md 本文へ再混入
+# ---------------------------------------------------------------------------
+F="$(make_fixture template-ref)"
+/usr/bin/python3 - "${F}/skills/task-fix/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+# 本文中の相対参照を、ハードコード絶対パスへ差し戻す（再混入を模す）。
+t = t.replace(
+    "templates/fix-result-template.md",
+    "~/.claude/skills/task-fix/templates/fix-result-template.md",
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "template-ref 異常（絶対パス再混入）→ exit 1" "${F}" 1 "[template-ref]"
+
+# ---------------------------------------------------------------------------
+# 集計
+# ---------------------------------------------------------------------------
+echo
+echo "————————————————————————————————"
+echo "PASS: ${PASS_COUNT} / FAIL: ${FAIL_COUNT}"
+if [[ "${FAIL_COUNT}" -ne 0 ]]; then
+  echo "回帰テスト失敗"
+  exit 1
+fi
+echo "全回帰テスト合格"
+exit 0

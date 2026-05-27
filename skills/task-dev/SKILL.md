@@ -165,16 +165,59 @@ todo.md の依存関係を分析し、**独立して並行実装できるタス�
 
 ## 手順
 
+### ステップ0: 全フェーズを Task に登録する【FR-1: フロー強制】
+
+本スキルの手順に着手する前に、まず以下の全フェーズを `TaskCreate` で一括登録してください。
+登録順に実行し、どのフェーズもスキップ・前倒しをしないこと。各フェーズは着手直前に
+`TaskUpdate` で `in_progress`、完了直後に `completed` へ更新します。
+
+登録するフェーズ（この順序・各 subject は imperative 形）:
+
+1. プロジェクトルートを pwd で解決する
+2. design.md・todo.md を読み込む
+3. dev-result-template.md を読み込む
+4. dev-result.md を初期化する（todo からチェックリスト抽出）
+5. ToDo リストの各タスクを実装する（着手時に下記「todo タスクの動的登録」を行う）
+6. dev-result.md を完成させメタ情報を追記する
+
+> **Task ツールが利用できない場合のフォールバック**: `TaskCreate` / `TaskUpdate` が
+> 当該環境で利用できない場合は、上記フェーズ一覧を本文中のチェックリスト（`- [ ]`）として
+> 保持し、各フェーズ完了を明示しながら順守してください。Task ツールの不在を理由に
+> フェーズを省略しないこと。Task ツールの可用性は `ToolSearch query="select:TaskCreate,TaskUpdate"`
+> で判定し、`<functions>` ブロックに両方が含まれれば利用可、含まれない／ToolSearch が
+> エラー終了した場合は利用不可としてチェックリストへフォールバックします。フォールバック時は
+> 「Task ツールが使えないため地の文チェックリストで進行します」と1行表示してから続行してください。
+>
+> **`--team` 有効時**: Agent Teams が成立している場合は、チーム共有タスクリスト上で
+> 各フェーズを Task として扱います（フェーズ=親、todo 項目=子）。独自のフェーズ追跡は
+> 共有タスクリストに統合してください。
+
 ### ステップ1: ファイル読み込み
 Readツールで以下のファイルを読み込み、設計とタスク内容を確認してください:
 - `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/design.md`
 - `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/todo.md`
 
 ### ステップ2: テンプレート読み込み
-Readツールで `~/.claude/skills/task-dev/templates/dev-result-template.md` を読み込み、報告書のフォーマットを確認してください。
+Readツールで、このスキルのベースディレクトリ（起動時に `Base directory for this skill` として提示されるパス）配下の `templates/dev-result-template.md` を読み込み、報告書のフォーマットを確認してください。
 
 ### ステップ3: 報告書初期化
 Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/dev-result.md` を作成し、テンプレートを基にtodo.mdからチェックリスト形式で抽出した内容で初期化してください。
+
+#### ステップ4 の直前: todo タスクの動的登録【FR-1】
+
+dev-result.md 初期化（ステップ3 / フェーズ4）が completed になったら、実装を始める前に、
+todo.md に列挙された各実装タスクを 1 件ずつ個別の Task として `TaskCreate` で登録して
+ください（subject は todo の各タスク名をそのまま使う）。
+以降、各 todo タスクに着手する直前にその Task を `in_progress`、完了直後に `completed`
+へ更新します。全 todo タスクが completed になったことを確認してから、固定フェーズ
+「ToDo リストの各タスクを実装する」を completed にしてください。
+
+- 件数は実行時に todo.md を読んで初めて判明するため、件数は固定せず「各タスクを登録せよ」
+  という指示の形を取ります。
+- `--team` 有効時は、チームメイトに割り当てた todo タスクの Task に `owner` を設定し、
+  チーム共有タスクリスト上で進捗を追跡します。
+- Task ツールが利用できない場合は、todo タスク一覧を地の文チェックリスト（`- [ ]`）として
+  保持し、各タスク完了を明示しながら進めてください。
 
 ### ステップ4: 実装
 ToDoリストの順序に従って実装を進めてください。

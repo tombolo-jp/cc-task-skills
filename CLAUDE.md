@@ -21,6 +21,20 @@ The repository contains 8 interconnected skills that work together (task-init ex
 
 Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
+## 設計原則: フローはツールで物理的に強制する
+
+本プロジェクトの各スキルは「手順」セクションを地の文の Markdown で記述しているが、順守させたいワークフローは、地の文の指示だけに頼らず、組み込みツール（`TaskCreate` / `TaskUpdate` による Task 登録）で構造として物理的に強制することを設計原則とする。
+
+地の文の手順記述のみでは、フェーズのスキップ・実装の早期着手・フェーズの取りこぼしが起こりうる。これに対し、スキルの全フェーズを実行前に Task として登録し、各フェーズを `in_progress` / `completed` で遷移させることで、フロー順守を構造的に担保する。
+
+- 各スキルは「手順」冒頭（ステップ0）で自スキルの全フェーズを `TaskCreate` で一括登録し、着手直前に `in_progress`、完了直後に `completed` へ更新する。これがこの原則の具体化である。
+- これは「完璧な強制」ではなく「安定性の有意な向上」を狙う現実的スタンスである。地の文だけの手順記述に比べ、スキップ・前倒し・取りこぼしを構造的に起こりにくくする。
+- `TaskCreate` / `TaskUpdate` が利用できない環境では、フェーズ一覧を地の文のチェックリスト（`- [ ]`）で代替し、各フェーズ完了を明示しながら順守する。**ツールの不在を理由にフェーズを省略してはならない。**
+- `--team`（Agent Teams）成立時は、チーム共有タスクリストがフェーズ追跡を兼ねる（フェーズ=親 Task、todo 項目=子 Task）。独自のフェーズ追跡は共有タスクリストへ統合する。
+- 今後スキルを追加・変更する際も、多段フローを持つスキルにはこの原則を適用すること。
+
+この原則の各スキルへの反映状況と整合性は、`scripts/check_consistency.py`（後述「整合性チェック」）で機械的に検証する。
+
 ## Task Management Structure
 
 Each task follows a standardized directory structure:
@@ -86,6 +100,8 @@ Model aliases are used instead of full model IDs. This ensures automatic resolut
 将来的にread-only分析コマンドを追加する場合は、`agent: Explore` の指定を検討してください。
 
 ## Key Skill Behaviors
+
+> **フロー強制（全スキル共通）**: 8スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを `TaskCreate` で一括登録し、各フェーズを `in_progress` / `completed` で遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（「[設計原則: フローはツールで物理的に強制する](#設計原則-フローはツールで物理的に強制する)」の具体化）。`TaskCreate` / `TaskUpdate` が利用できない環境では地の文チェックリストへフォールバックする。**task-dev** は加えて、実行時に todo.md の各実装タスクを個別 Task として動的登録し、1件ずつ `in_progress` / `completed` 追跡する。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。
 
 ### /task-init {task_name} [URL]
 - Creates `.claude/tasks/{task_name}/` directory structure
@@ -257,12 +273,51 @@ ToolSearch 結果の判定:
 /task-dev my-task --team  # Agent Teams モードで実行
 ```
 
+## 整合性チェック
+
+本プロジェクトは「単一ファイル制約（include 機構なし）」のため、Agent Teams 共通ブロック・フォールバック文言・環境変数判定表・メタ情報フォーマット・テンプレート参照などの定型文が複数ファイルに重複して存在する。この重複は許容したうえで、ファイル間のズレを機械的に検出するのが `scripts/check_consistency.py`（Python 3 標準ライブラリのみ・サードパーティ依存ゼロ）である。
+
+検出する7検査:
+
+| 検査ID | 内容 |
+|--------|------|
+| `frontmatter` | 全8スキルの `model: opus` / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（task-init とその他7で別ルール） |
+| `common-block` | 7スキル（task-init 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
+| `fallback-msg` | フォールバック文言①②が CLAUDE.md と SKILL.md で一致するか（整形差を正規化して照合） |
+| `env-table` | 環境変数判定表（5行）が CLAUDE.md と共通ブロックで一致するか |
+| `meta-format` | 5テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
+| `env-json` | CLAUDE.md / README.md の `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` が一致するか |
+| `template-ref` | 5スキルのテンプレート参照が相対パスで実在し、ハードコード絶対パスの再混入がないか |
+
+実行方法:
+
+```bash
+python3 scripts/check_consistency.py        # 不一致のみ表示
+python3 scripts/check_consistency.py -v     # 全検査の結果を表示
+bash scripts/test/run_consistency_tests.sh  # 検査自体の回帰テスト（fixture 異常系）
+```
+
+終了コード: `0`=整合 / `1`=不整合検出 / `2`=実行エラー（対象ファイル欠落・パース不能等）。
+
+**ローカルフック（任意・推奨）**: リポジトリ同梱の pre-commit フックを有効化すると、対象ファイル（`skills/**`・`CLAUDE.md`・`README.md`・templates）を変更したコミット時に自動でチェックが走る。
+
+```bash
+git config core.hooksPath scripts/hooks
+```
+
+対象ファイルを変更しないコミットは即スキップされる（高速パス）。緊急時は `git commit --no-verify` でバイパスできる。
+
 ## Installation Method
 
 Skills are installed by copying the skill directories to the Claude Code skills directory:
 ```bash
 cp -r cc-task-skills/skills/* ~/.claude/skills/
 ```
+
+> **開発・コントリビュート時**: スキル定義やドキュメントを編集する場合は、前述「整合性チェック」のローカルフックを有効化しておくと定型文のズレを早期に検出できる。
+> ```bash
+> git config core.hooksPath scripts/hooks
+> ```
 
 ## Language Support
 
@@ -316,7 +371,16 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-05-26 00:00:00
+最終更新: 2026-05-28 01:26:00
+更新内容: GitHub Actions による CI（`.github/workflows/consistency.yml`）を削除し、整合性チェックをローカル pre-commit フック（`git config core.hooksPath scripts/hooks`）に一本化する方針へ変更。判断理由: 個人パブリックリポジトリであり、ローカルフックが有効化済みのため二重実行が冗長と判断。`scripts/check_consistency.py` と `scripts/test/run_consistency_tests.sh` 本体は従来どおり維持（フックおよび手動実行で使用）。CLAUDE.md「整合性チェック」節の CI 項を削除、README.md の CI 項を削除しローカルフックに整合性担保を集約する旨を追記。空になった `.github/` ディレクトリも削除。削除後 `python3 scripts/check_consistency.py` で全7検査 PASS（exit 0）・回帰テスト 8/8 PASS を確認。
+
+前回更新: 2026-05-27 23:41:20
+更新内容: ワークフロー順守強化（FR-1 / FR-2 / FR-3）を実装。**FR-1（フロー強制）**: 全8スキルの「手順」冒頭に「ステップ0: 全フェーズを Task に登録する」ブロックを追加。各スキルは自身の全フェーズを `TaskCreate` で一括登録し `in_progress` / `completed` 遷移で順守を構造的に強制する。Task ツール不在時は地の文チェックリストへフォールバック。task-dev は加えて todo.md の各実装タスクを個別 Task として動的登録。task-init は URL 有無分岐後に確定系列フェーズのみ登録する特例（取得手段ゼロ時はフェーズ2を in_progress のまま中断・後続 pending でエラー終了）。Agent Teams 最優先分岐ロジックは未変更（後方互換）。**FR-2（設計原則明文化）**: CLAUDE.md の Skill Architecture 直後に「設計原則: フローはツールで物理的に強制する」節を新設。「完璧な強制ではなく安定性の有意な向上」を狙う現実的スタンスと Task 不在時フォールバック方針を明記。**FR-3（整合性チェック）**: `scripts/check_consistency.py`（Python 3 標準ライブラリのみ・サードパーティ依存ゼロ）を新規追加。frontmatter / common-block / fallback-msg / env-table / meta-format / env-json / template-ref の7検査で重複定型文のズレを検出（exit 0=整合 / 1=不整合 / 2=実行エラー）。`scripts/hooks/pre-commit`（`core.hooksPath` 参照・対象無変更時は高速スキップ・`--no-verify` バイパス可）、`.github/workflows/consistency.yml`（CI・初期 informational）、`scripts/test/run_consistency_tests.sh`（7検査の異常系 fixture 回帰テスト）を配置。CLAUDE.md（Key Skill Behaviors 冒頭にフロー強制注記・「整合性チェック」節・Installation Method にフック有効化）と README.md（使用方法のフロー強制注記・インストール手順・「整合性チェック」節）を同期。Agent Teams（script-dev: FR-3 / skills-dev: FR-1 / team-lead: FR-2・ドキュメント）で並行実装し、最終 `python3 scripts/check_consistency.py` で全7検査 PASS（exit 0）・回帰テスト 8/8 PASS を確認。
+
+前回更新: 2026-05-27 12:30:00
+更新内容: 既知の軽微な不整合を2件修正。(1) 5スキル（task-dev / task-fix / task-review / task-todo / task-verify）のテンプレート参照を `~/.claude/skills/task-xxx/templates/...` のハードコード絶対パスから、スキルのベースディレクトリ（起動時に `Base directory for this skill` として提示されるパス）配下の相対参照 `templates/...` に変更。インストール先非依存となり、リポジトリ内での参照解決の妥当性も向上。(2) task-todo の todo-template.md にメタ情報セクションを追加し、他4テンプレート（dev-result / fix-result / review / verify）と形式を統一（task-todo は SKILL.md 本文にもメタ情報出力指示があるため、todo.md 自体へのメタ情報出力は従来から保証済み。今回はテンプレート間の形式不統一を解消）。
+
+前回更新: 2026-05-26 00:00:00
 更新内容: task-init に URL からのタスク概要自動取得機能を追加。第2引数に URL（任意）を受け取り、本文＋コメントを改変せず全文転記、添付を `attachments/` サブディレクトリに保存、init.md 末尾に要約セクションを付与する。取得は MCP 優先（URL ドメインから ToolSearch で特化 MCP を検出）→ ブラウザ優先フォールバック（claude-in-chrome → chrome-devtools → Playwright → WebFetch）。取得手段が一つも無い場合は mkdir 前にエラー終了し init.md・ディレクトリを作成しない。部分取得時は取得分で続行し未取得項目を init.md に明記。URL はシングルクォート推奨（前後クォートは除去）。これに伴い task-init のモデルを `haiku` → `opus` に変更（全8スキルが opus に統一、haiku 不使用）。SKILL.md 本文を URL 有無分岐フローに再構成、frontmatter に `argument-hint` 追加・`allowed-tools` 行削除。CLAUDE.md の Skill Architecture / Model Configuration 表 / エイリアス補足文 / Key Skill Behaviors を更新。README.md の task-init 節とファイル構造図を同期更新。
 
 前回更新: 2026-05-16 00:00:00

@@ -14,7 +14,15 @@ git clone https://github.com/tombolo-jp/cc-task-skills.git
 cp -r cc-task-skills/skills/* ~/.claude/skills/
 ```
 
+3. （任意・このリポジトリを編集する場合）整合性チェックの pre-commit フックを有効化します：
+```bash
+git config core.hooksPath scripts/hooks
+```
+スキル定義やドキュメントの定型文のズレをコミット時に自動検出できます（詳細は後述「整合性チェック」）。
+
 ## 使用方法
+
+> **フロー強制について**: 各スキルは「手順」冒頭のステップ0で自身の全フェーズを Task として登録し、`in_progress` / `completed` で状態遷移させながら進みます。これにより、フェーズのスキップ・実装の早すぎる着手・手順の取りこぼしを構造的に防ぎます（地の文の手順記述だけに頼りません）。Task ツールが使えない環境では地の文チェックリストへ自動的にフォールバックします。
 
 ### 基本的なワークフロー
 
@@ -168,6 +176,20 @@ task-init を除く全スキルは `--team` オプションに対応していま
 ### コストに関する注意
 
 Agent Teams はトークン消費が大幅に増加します（通常の2〜5倍）。必要な場合にのみ使用してください。
+
+## 整合性チェック
+
+このスキル集は include 機構を持たないため、Agent Teams 共通ブロックやフォールバック文言などの定型文が複数のファイルに重複しています。`scripts/check_consistency.py`（Python 3 標準ライブラリのみ）は、これらの重複箇所のズレを機械的に検出します。
+
+```bash
+python3 scripts/check_consistency.py        # 不一致のみ表示
+python3 scripts/check_consistency.py -v     # 全7検査の結果を表示
+bash scripts/test/run_consistency_tests.sh  # 検査自体の回帰テスト
+```
+
+検査内容は frontmatter / Agent Teams 共通ブロック / フォールバック文言 / 環境変数判定表 / メタ情報フォーマット / 環境変数 JSON / テンプレート参照の7種です。終了コードは `0`=整合 / `1`=不整合 / `2`=実行エラー。
+
+- **ローカルフック**: `git config core.hooksPath scripts/hooks` で pre-commit フックを有効化すると、対象ファイル変更時に自動でチェックが走ります（対象外の変更は高速スキップ、緊急時は `git commit --no-verify` でバイパス可能）。整合性チェックはこのローカルフックで担保します（GitHub Actions による CI は使用していません）。
 
 ## ライセンス
 

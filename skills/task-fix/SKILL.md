@@ -164,6 +164,32 @@ review.md の指摘事項を分析し、**独立して修正できる指摘群**
 
 ## 手順
 
+### ステップ0: 全フェーズを Task に登録する【FR-1: フロー強制】
+
+本スキルの手順に着手する前に、まず以下の全フェーズを `TaskCreate` で一括登録してください。
+登録順に実行し、どのフェーズもスキップ・前倒しをしないこと。各フェーズは着手直前に
+`TaskUpdate` で `in_progress`、完了直後に `completed` へ更新します。
+
+登録するフェーズ（この順序・各 subject は imperative 形）:
+
+1. プロジェクトルートを pwd で解決する
+2. review.md・design.md を読み込む
+3. 指摘事項に従いコードを修正する
+4. fix-result-template.md を読み込む
+5. fix-result.md を作成しメタ情報を追記する
+
+> **Task ツールが利用できない場合のフォールバック**: `TaskCreate` / `TaskUpdate` が
+> 当該環境で利用できない場合は、上記フェーズ一覧を本文中のチェックリスト（`- [ ]`）として
+> 保持し、各フェーズ完了を明示しながら順守してください。Task ツールの不在を理由に
+> フェーズを省略しないこと。Task ツールの可用性は `ToolSearch query="select:TaskCreate,TaskUpdate"`
+> で判定し、`<functions>` ブロックに両方が含まれれば利用可、含まれない／ToolSearch が
+> エラー終了した場合は利用不可としてチェックリストへフォールバックします。フォールバック時は
+> 「Task ツールが使えないため地の文チェックリストで進行します」と1行表示してから続行してください。
+>
+> **`--team` 有効時**: Agent Teams が成立している場合は、チーム共有タスクリスト上で
+> 各フェーズを Task として扱います（フェーズ=親、todo 項目=子）。独自のフェーズ追跡は
+> 共有タスクリストに統合してください。
+
 ### ステップ1: ファイル読み込み
 Readツールで以下のファイルを読み込み、修正方針を確認してください:
 - `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/review.md`
@@ -177,7 +203,7 @@ review.md の修正方針と指摘事項に従って、コードを修正して�
 - 既存のコーディング規約・パターンに従う
 
 ### ステップ3: テンプレート読み込み
-Readツールで `~/.claude/skills/task-fix/templates/fix-result-template.md` を読み込み、報告書のフォーマットを確認してください。
+Readツールで、このスキルのベースディレクトリ（起動時に `Base directory for this skill` として提示されるパス）配下の `templates/fix-result-template.md` を読み込み、報告書のフォーマットを確認してください。
 
 ### ステップ4: 修正報告書作成
 Writeツールで `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/fix-result.md` を作成してください。テンプレートに従い、メタ情報セクションに実行モデル名・実行日時・Agent Teams の値（有効 / 無効（指定なし） / 無効（フォールバック））を正確に記入してください。

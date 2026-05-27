@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# 整合性チェック pre-commit フック（FR-3 / design §8.5）。
+#
+# 配置: core.hooksPath で参照される（.git/hooks へのコピー不要）。有効化:
+#   git config core.hooksPath scripts/hooks
+#
+# 動作:
+#   - ステージされた変更に整合性チェック対象（skills/**・CLAUDE.md・README.md・
+#     templates）が含まれない場合は即 exit 0（高速パス, design §8.5）。
+#   - 含まれる場合のみ python3 scripts/check_consistency.py を実行し、その終了コードを返す。
+#     不整合（exit 1）/ 実行エラー（exit 2）はコミットをブロックする。
+#   - バイパスが必要な場合は `git commit --no-verify` を使う（CLAUDE.md / README.md に明記）。
+#
+# 依存: bash / git / python3（stdlib のみ）。
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+CHECKER="${REPO_ROOT}/scripts/check_consistency.py"
+
+# ステージ済みファイル一覧（追加/変更/コピー/リネーム対象）。
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+# 整合性チェックに影響する対象ファイルか判定（高速パス用）。
+if ! grep -Eq '^(skills/|CLAUDE\.md$|README\.md$)' <<<"${staged}"; then
+  # 対象ファイルに変更なし → チェック不要
+  exit 0
+fi
+
+if [[ ! -f "${CHECKER}" ]]; then
+  echo "pre-commit: ${CHECKER} が見つかりません。チェックをスキップします。" >&2
+  exit 0
+fi
+
+echo "pre-commit: 整合性チェックを実行します（バイパスするには git commit --no-verify）" >&2
+/usr/bin/python3 "${CHECKER}" --root "${REPO_ROOT}"
+status=$?
+
+if [[ "${status}" -ne 0 ]]; then
+  echo "pre-commit: 整合性チェックに失敗しました（exit ${status}）。コミットを中止します。" >&2
+  echo "pre-commit: 緊急時は git commit --no-verify でバイパスできます。" >&2
+fi
+
+exit "${status}"
