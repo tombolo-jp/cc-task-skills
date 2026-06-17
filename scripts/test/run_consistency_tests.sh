@@ -3,7 +3,7 @@
 #
 # 方針:
 #   1. 正常リポジトリ（このリポジトリ自身）を --root で検査 → exit 0 を確認。
-#   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
+#   2. 6検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
 #      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
 #
 # 依存: bash / python3 / 標準コマンドのみ（テストフレームワーク不使用）。
@@ -109,7 +109,7 @@ PY
 run_case "common-block 異常（task-review 改変）→ exit 1" "${F}" 1 "[common-block]"
 
 # ---------------------------------------------------------------------------
-# (3) fallback-msg: CLAUDE.md 側のフォールバック文言①を改変
+# (3) fallback-msg: CLAUDE.md 側のフォールバック文言②を改変
 #     （common-block を壊さないよう CLAUDE.md のみ変更）
 # ---------------------------------------------------------------------------
 F="$(make_fixture fallback-msg)"
@@ -121,29 +121,18 @@ out = []
 done = False
 for ln in lines:
     s = ln.strip()
-    if not done and s.startswith("「⚠️ Agent Teams が有効化されていません"):
+    if (not done and s.startswith("「⚠️")
+            and "利用できないため" in s
+            and "Agent Teams モードを起動できません" in s):
         ln = ln.replace("今回は通常モードで実行します。", "今回は通常モードで実行いたします。")
         done = True
     out.append(ln)
 open(p, "w", encoding="utf-8").write("".join(out))
 PY
-run_case "fallback-msg 異常（CLAUDE.md 文言①改変）→ exit 1" "${F}" 1 "[fallback-msg]"
+run_case "fallback-msg 異常（CLAUDE.md 文言②改変）→ exit 1" "${F}" 1 "[fallback-msg]"
 
 # ---------------------------------------------------------------------------
-# (4) env-table: CLAUDE.md 判定表の1セルを改変
-# ---------------------------------------------------------------------------
-F="$(make_fixture env-table)"
-/usr/bin/python3 - "${F}/CLAUDE.md" <<'PY'
-import sys
-p = sys.argv[1]
-t = open(p, encoding="utf-8").read()
-t = t.replace("| `__UNSET__` | 無効（未設定） |", "| `__UNSET__` | 無効（未定義） |", 1)
-open(p, "w", encoding="utf-8").write(t)
-PY
-run_case "env-table 異常（CLAUDE.md セル改変）→ exit 1" "${F}" 1 "[env-table]"
-
-# ---------------------------------------------------------------------------
-# (5) meta-format: テンプレートの Agent Teams 3値表記を崩す
+# (4) meta-format: テンプレートの Agent Teams 3値表記を崩す
 # ---------------------------------------------------------------------------
 F="$(make_fixture meta-format)"
 /usr/bin/python3 - "${F}/skills/task-review/templates/review-template.md" <<'PY'
@@ -160,7 +149,7 @@ PY
 run_case "meta-format 異常（3値表記崩し）→ exit 1" "${F}" 1 "[meta-format]"
 
 # ---------------------------------------------------------------------------
-# (6) env-json: README.md の AGENT_TEAMS 設定行を削除
+# (5) env-json: README.md の AGENT_TEAMS 設定行を削除
 # ---------------------------------------------------------------------------
 F="$(make_fixture env-json)"
 /usr/bin/python3 - "${F}/README.md" <<'PY'
@@ -174,7 +163,7 @@ PY
 run_case "env-json 異常（README.md から削除）→ exit 1" "${F}" 1 "[env-json]"
 
 # ---------------------------------------------------------------------------
-# (7) template-ref: ハードコード絶対パスを SKILL.md 本文へ再混入
+# (6) template-ref: ハードコード絶対パスを SKILL.md 本文へ再混入
 # ---------------------------------------------------------------------------
 F="$(make_fixture template-ref)"
 /usr/bin/python3 - "${F}/skills/task-fix/SKILL.md" <<'PY'

@@ -88,11 +88,11 @@ Model aliases are used instead of full model IDs. This ensures automatic resolut
 
 | 状態 | 値 |
 |------|-----|
-| `--team` 指定あり、かつ ① 環境変数有効、② TeamCreate ツール利用可能、③ チームメイトが少なくとも 1 体稼働、の **すべて**を満たす | `有効` |
+| `--team` 指定あり、かつ ① `Agent` ツールでチームメイトが少なくとも 1 体実際に稼働、の条件を満たす | `有効` |
 | `--team` 指定なし | `無効（指定なし）` |
-| `--team` 指定あり、かつ環境変数無効/ツール利用不可/チームメイト spawn 失敗のいずれか | `無効（フォールバック）` |
+| `--team` 指定あり、かつ `Agent` ツール利用不可/チームメイト spawn 失敗のいずれか | `無効（フォールバック）` |
 
-> **重要**: `TeamCreate` を呼んだだけでチームメイトが稼働しなかった場合は **`有効` ではなく `無効（フォールバック）`** と記録すること。環境変数が有効であっても、チームメイトの実際の稼働が確認できない場合は `有効` とみなしません。
+> **重要**: チームメイトが実際に稼働しなかった場合は **`有効` ではなく `無効（フォールバック）`** と記録すること。環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` の設定有無は成立判定に影響しません（同変数がゲートするのは `SendMessage` による teammate 間ライブ通信のみで、`Agent` spawn と `TaskCreate`/`TaskUpdate` は変数なしでも動作するため）。
 
 ## agent フィールドについて
 
@@ -180,9 +180,13 @@ Model aliases are used instead of full model IDs. This ensures automatic resolut
 /task-review my-task --team
 ```
 
-### 有効化方法
+### 起動方法
 
-Agent Teams 機能を使用するには、`~/.claude/settings.json` に以下を追加してください:
+`--team` を付けるだけで並列実行（Agent Teams）が起動します。環境変数の事前設定は **不要** です。スキルは `Agent` ツールでチームメイトを直接 spawn し、各チームメイトの成果を `Agent` の**戻り値**（最終メッセージが tool result として返る）で収集、`TaskCreate` / `TaskUpdate` で進捗を共有します。
+
+### （任意）SendMessage ライブ協調の有効化
+
+チームメイト間の**ライブ通信**（`SendMessage`）を使いたい場合のみ、`~/.claude/settings.json` に以下を追加してください。これは **任意設定** であり、未設定でも `--team` による並列実行は問題なく起動します（`SendMessage` が使えない場合は `Agent` 戻り値方式で成立します）。
 
 ```json
 {
@@ -191,6 +195,8 @@ Agent Teams 機能を使用するには、`~/.claude/settings.json` に以下を
   }
 }
 ```
+
+> **env 変数の役割（F-7）**: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が現在ゲートしているのは `SendMessage`（teammate 間ライブ通信）ただ 1 つです。`Agent` による spawn と `TaskCreate` / `TaskUpdate` による共有タスク管理は **この変数なしでも動作します**。したがって変数は「Agent Teams を動かすためのスイッチ」ではなく「SendMessage ライブ協調レイヤを有効化する任意スイッチ」です。
 
 ### コストに関する注意
 
@@ -204,65 +210,44 @@ Agent Teams はトークン消費が大幅に増加します。チームメイ�
 - そのため、Agent Teams を Skills 経由で利用するには、スキル本体をメイン会話で実行する必要があります
 - トレードオフとして、スキル実行中の中間出力（ファイル読込・分析等）はメイン会話のコンテキストウィンドウを消費します。Opus 4.7 1M context モデルを使用していれば実用上問題は小さい想定です
 
-### 環境変数の判定ルール
-
-`--team` が指定された場合、スキルは Bash ツールで以下のコマンドを実行して環境変数を確認します:
-
-```bash
-printenv CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS || echo "__UNSET__"
-```
-
-出力値の判定:
-
-| 出力値 | 扱い |
-|--------|------|
-| `1` | 有効 |
-| `true`（大文字小文字問わず） | 有効 |
-| `__UNSET__` | 無効（未設定） |
-| 空文字列 | 無効（空値） |
-| 上記以外（例: `0`, `false`, `no` 等） | 無効（明示的に無効化） |
-
 ### Agent Teams 実行成立条件
 
-Agent Teams が `有効` と記録されるためには、以下の **3 条件すべて** を満たす必要があります:
+Agent Teams が `有効` と記録されるためには、以下の **2 条件すべて** を満たす必要があります:
 
 1. `--team` 引数が指定されていること
-2. 環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が有効値（`1` または `true`）であること
-3. `ToolSearch` で `TeamCreate` が利用可能と確認でき、かつチームメイトが少なくとも 1 体実際に稼働（応答）したこと
+2. `Agent` ツールで spawn したチームメイトが少なくとも 1 体実際に稼働（応答）したこと
 
-### Agent Teams ツールのロード手順
+> 環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` は成立条件に **含めません**（F-7。同変数がゲートするのは `SendMessage` のみであり、並列実行の中核は変数なしで動作するため）。
 
-環境変数が有効と確認された場合、スキルは以下の手順で Agent Teams ツールをロードします:
+### 協調ツールのロード手順
+
+`--team` 指定時、スキルは進捗共有・ライブ通信に用いるツールを以下でロードします。`Agent` は core ツールでメイン会話に常在するため、ToolSearch でのロードは **不要** です。
 
 ```
-ToolSearch query="select:TeamCreate,TeamDelete,SendMessage,TaskStop" max_results=10
+ToolSearch query="select:TaskCreate,TaskUpdate,SendMessage" max_results=10
 ```
 
 ToolSearch 結果の判定:
 
 | 結果 | 扱い |
 |------|------|
-| `TeamCreate` が `<functions>` ブロックに含まれる | チーム生成へ進む |
-| `TeamCreate` が含まれない、または `<functions>` ブロックが空 | ツール利用不可 — フォールバック |
-| ToolSearch 自体がエラー終了 | ツール利用不可 — フォールバック |
+| `SendMessage` が `<functions>` ブロックに含まれる | ライブ通信を併用可。`TaskCreate` / `TaskUpdate` と合わせて利用する |
+| `SendMessage` が含まれない（env 変数無効） | ライブ通信は使わず、`Agent` の戻り値方式で続行する（フォールバックしない） |
+| ToolSearch 自体がエラー終了 | `Agent` 戻り値方式で続行する（フォールバックしない） |
+
+> `Agent` による spawn 自体は上記いずれの場合でも実行可能です。`SendMessage` の可否は成立判定に影響しません。
 
 ### フォールバック動作
 
-以下のいずれかの場合、スキルは対応するメッセージを **必ず** 表示してから通常モードにフォールバックします（省略・要約禁止）:
+`--team` 指定時に **`Agent` ツールが利用不可、またはチームメイトが 1 体も稼働しなかった場合**、スキルは以下のメッセージを **必ず** 表示してから通常モードにフォールバックします（省略・要約禁止）:
 
-**環境変数が未設定または無効な場合:**
+「⚠️ Agent Teams（チームメイトの起動）が現在の環境で利用できないため、Agent Teams モードを起動できません。今回は通常モードで実行します。」
 
-「⚠️ Agent Teams が有効化されていません。`~/.claude/settings.json` の `env` フィールドに `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を設定してください。今回は通常モードで実行します。」
-
-**ツールが利用できない場合（ToolSearch で TeamCreate が取得不可、または TeamCreate 後にチームメイトが spawn できない場合）:**
-
-「⚠️ Agent Teams ツール（TeamCreate 等）が現在の環境で利用できないため、Agent Teams モードを起動できません。今回は通常モードで実行します。」
-
-**重要**: スキルは「黙ってフォールバックする」ことを禁止しています。どの理由でフォールバックする場合も、必ず対応するメッセージを表示します。
+**重要**: スキルは「黙ってフォールバックする」ことを禁止しています。フォールバックする場合は必ず上記メッセージを表示します。
 
 **`--team` 未指定時の動作**:
 
-`--team` が指定されていない場合、スキルは Agent Teams に関するメッセージを **一切表示しません**。環境変数確認・ToolSearch・TeamCreate などの Agent Teams 関連操作も **一切実行しません**。
+`--team` が指定されていない場合、スキルは Agent Teams に関するメッセージを **一切表示しません**。ToolSearch・チームメイト spawn などの Agent Teams 関連操作も **一切実行しません**。
 
 ### 後方互換性
 
@@ -275,16 +260,15 @@ ToolSearch 結果の判定:
 
 ## 整合性チェック
 
-本プロジェクトは「単一ファイル制約（include 機構なし）」のため、Agent Teams 共通ブロック・フォールバック文言・環境変数判定表・メタ情報フォーマット・テンプレート参照などの定型文が複数ファイルに重複して存在する。この重複は許容したうえで、ファイル間のズレを機械的に検出するのが `scripts/check_consistency.py`（Python 3 標準ライブラリのみ・サードパーティ依存ゼロ）である。
+本プロジェクトは「単一ファイル制約（include 機構なし）」のため、Agent Teams 共通ブロック・フォールバック文言・メタ情報フォーマット・テンプレート参照などの定型文が複数ファイルに重複して存在する。この重複は許容したうえで、ファイル間のズレを機械的に検出するのが `scripts/check_consistency.py`（Python 3 標準ライブラリのみ・サードパーティ依存ゼロ）である。
 
-検出する7検査:
+検出する6検査:
 
 | 検査ID | 内容 |
 |--------|------|
 | `frontmatter` | 全8スキルの `model: opus` / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（task-init とその他7で別ルール） |
 | `common-block` | 7スキル（task-init 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
-| `fallback-msg` | フォールバック文言①②が CLAUDE.md と SKILL.md で一致するか（整形差を正規化して照合） |
-| `env-table` | 環境変数判定表（5行）が CLAUDE.md と共通ブロックで一致するか |
+| `fallback-msg` | フォールバック文言が CLAUDE.md と SKILL.md で一致するか（整形差を正規化して照合） |
 | `meta-format` | 5テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
 | `env-json` | CLAUDE.md / README.md の `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` が一致するか |
 | `template-ref` | 5スキルのテンプレート参照が相対パスで実在し、ハードコード絶対パスの再混入がないか |
@@ -371,7 +355,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-05-28 01:26:00
+最終更新: 2026-06-17 14:00:10
+更新内容: Agent Teams 機構を現行 Claude Code 仕様へ追従させる改修（タスク名 `team`、設計書 `.claude/tasks/team/design.md`）。最近の仕様変更で `TeamCreate` / `TeamDelete` が廃止され `--team` が常にフォールバックしていた問題を根治。**(1) 廃止 API 全廃**: `TeamCreate` / `TeamDelete` 依存を全スキル・全ドキュメントから削除し、チーム生成を `Agent` ツールの直接 spawn へ移行（`Agent` は core ツールでメイン会話に常在しロード不要）。成果収集は `Agent` の戻り値を主経路とする。**(2) env ハードゲート撤廃**: 実機検証（F-7）で `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` がゲートするのは `SendMessage`（teammate 間ライブ通信）のみと判明。`Agent` spawn と `TaskCreate` / `TaskUpdate` は変数なしで動作するため、env 変数を成立条件から除外し「SendMessage ライブ協調を使いたい場合の任意設定」へ格下げ。これにより `--team` だけで並列実行が起動する。**(3) 成立条件 3→2**: ①`--team` 指定 ②チームメイト 1 体以上稼働。env 変数・TeamCreate 条件を削除。**(4) 共通ブロック簡素化**: 環境変数判定表・ToolSearch（TeamCreate）判定・空チームクリーンアップ・二重フォールバックを撤廃し約半減。ロード対象を `select:TaskCreate,TaskUpdate,SendMessage` へ変更。**(5) フォールバック整理**: 文言①（env 設定依頼）を廃止、文言②を「⚠️ Agent Teams（チームメイトの起動）が現在の環境で利用できないため、Agent Teams モードを起動できません。今回は通常モードで実行します。」へ更新。発火条件を「`Agent` 不可 または spawn 失敗」のみへ限定。**(6) 整合性チェック追従**: `env-table` 検査を削除し 7→6 検査へ。`fallback-msg` 文言を更新、`env-json` は任意設定の記述として維持。メタ情報 3 値の文字列は不変（判定条件のみ再定義）。CLAUDE.md・README.md・7 SKILL.md・`check_consistency.py`・回帰テストを同期。
+
+前回更新: 2026-05-28 01:26:00
 更新内容: GitHub Actions による CI（`.github/workflows/consistency.yml`）を削除し、整合性チェックをローカル pre-commit フック（`git config core.hooksPath scripts/hooks`）に一本化する方針へ変更。判断理由: 個人パブリックリポジトリであり、ローカルフックが有効化済みのため二重実行が冗長と判断。`scripts/check_consistency.py` と `scripts/test/run_consistency_tests.sh` 本体は従来どおり維持（フックおよび手動実行で使用）。CLAUDE.md「整合性チェック」節の CI 項を削除、README.md の CI 項を削除しローカルフックに整合性担保を集約する旨を追記。空になった `.github/` ディレクトリも削除。削除後 `python3 scripts/check_consistency.py` で全7検査 PASS（exit 0）・回帰テスト 8/8 PASS を確認。
 
 前回更新: 2026-05-27 23:41:20

@@ -2,7 +2,7 @@
 """cc-task-skills 横断整合性チェックスクリプト（FR-3）。
 
 各 SKILL.md / CLAUDE.md / README.md / テンプレート間で重複記載される定型文
-（Agent Teams 共通ブロック・フォールバック文言・環境変数判定表・メタ情報3行など）の
+（Agent Teams 共通ブロック・フォールバック文言・メタ情報3行など）の
 ズレを機械的に検出する。include 機構が無いため定型文の重複を許容し、ズレをこのスクリプトで担保する。
 
 依存は Python 3 標準ライブラリのみ（/usr/bin/python3 = 3.9.6 で動作）。サードパーティ import なし。
@@ -63,15 +63,6 @@ META_DATETIME_LINE = "- 実行日時: [日時]"
 
 # env-json で両ファイルに存在すべき行（前後空白は無視して比較）。
 ENV_JSON_LINE = '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"'
-
-# 環境変数判定表の期待5行（セル単位 [出力値, 扱い]）。
-ENV_TABLE_ROWS = [
-    ["`1`", "有効"],
-    ["`true`（大文字小文字問わず）", "有効"],
-    ["`__UNSET__`", "無効（未設定）"],
-    ["空文字列", "無効（空値）"],
-    ["上記以外（例: `0`, `false`, `no` 等）", "無効（明示的に無効化）"],
-]
 
 
 # ---------------------------------------------------------------------------
@@ -271,34 +262,8 @@ def make_diff(expected, actual, expected_label, actual_label):
     return "\n".join(line.rstrip("\n") for line in diff)
 
 
-def parse_table_rows(text, header_re):
-    """Markdown テーブルを抽出し、各データ行をセルのリストとして返す。
-
-    header_re にマッチするヘッダ行を見つけ、その直後の区切り行（|---|）をスキップし、
-    以降の `|...|` 行をデータ行として収集する。最初の非テーブル行で終了。
-    戻り値: [[cell, cell, ...], ...]（各セルは strip 済み）。
-    """
-    lines = text.splitlines()
-    rows = []
-    i = 0
-    n = len(lines)
-    while i < n:
-        if header_re.search(lines[i]) and lines[i].lstrip().startswith("|"):
-            # ヘッダの次の行が区切り行か確認
-            j = i + 1
-            if j < n and re.match(r"^\s*\|[\s:|-]+\|\s*$", lines[j]):
-                j += 1
-                while j < n and lines[j].lstrip().startswith("|"):
-                    cells = [c.strip() for c in lines[j].strip().strip("|").split("|")]
-                    rows.append(cells)
-                    j += 1
-                return rows
-        i += 1
-    return rows
-
-
 # ---------------------------------------------------------------------------
-# 検査関数群（§7.2 の7検査）
+# 検査関数群（§7.2 の6検査）
 # ---------------------------------------------------------------------------
 
 def check_frontmatter(repo):
@@ -412,10 +377,11 @@ def _extract_blockquote_messages(text):
 
 
 def check_fallback_msg(repo):
-    """[fallback-msg] フォールバック文言①②が CLAUDE.md と SKILL.md で整形差を除いて一致するか。
+    """[fallback-msg] フォールバック文言②が CLAUDE.md と SKILL.md で整形差を除いて一致するか。
 
     CLAUDE.md は鉤括弧地の文、SKILL.md は `> ⚠️` blockquote。normalize_msg で整形差を吸収。
-    task-init の URL 用文言は別物なので照合対象から除外（init は SKILL を見ない）。
+    env 変数ハードゲート撤廃に伴い文言①（環境変数設定依頼）は廃止され、照合は文言②
+    （チームメイト起動不可）のみとする。task-init の URL 用文言は別物なので照合対象から除外。
     """
     check_id = "fallback-msg"
     claude_text = repo.text(repo.claude_md)
@@ -427,32 +393,22 @@ def check_fallback_msg(repo):
         if stripped.startswith("「⚠️") and stripped.endswith("」"):
             claude_msgs.append(normalize_msg(stripped))
 
-    # 期待する2文言を特定（①環境変数無効 ②ツール利用不可）
-    msg_env = None
+    # 文言②（チームメイト起動不可）を特定
     msg_tool = None
     for m in claude_msgs:
-        if "有効化されていません" in m:
-            msg_env = m
-        elif "利用できないため" in m and "Agent Teams モードを起動できません" in m:
+        if "利用できないため" in m and "Agent Teams モードを起動できません" in m:
             msg_tool = m
 
     problems = []
-    if msg_env is None:
-        problems.append("CLAUDE.md にフォールバック文言①（環境変数無効）が見つかりません")
     if msg_tool is None:
-        problems.append("CLAUDE.md にフォールバック文言②（ツール利用不可）が見つかりません")
-
-    if msg_env is not None and msg_tool is not None:
+        problems.append("CLAUDE.md にフォールバック文言②（チームメイト起動不可）が見つかりません")
+    else:
         # 各 Agent Teams 対応 SKILL.md の blockquote と照合
         for skill in TEAM_SKILLS:
             path = repo.skill_md(skill)
             text = repo.text(path)
             loc = rel(repo.root, path)
             skill_msgs = _extract_blockquote_messages(text)
-            if msg_env not in skill_msgs:
-                problems.append(
-                    f"{loc}: フォールバック文言①が CLAUDE.md と一致しません（または欠落）"
-                )
             if msg_tool not in skill_msgs:
                 problems.append(
                     f"{loc}: フォールバック文言②が CLAUDE.md と一致しません（または欠落）"
@@ -466,56 +422,8 @@ def check_fallback_msg(repo):
         )
     return CheckResult(
         check_id, True,
-        "フォールバック文言①②が CLAUDE.md と7スキル SKILL.md で一致（整形差正規化後）",
+        "フォールバック文言②が CLAUDE.md と7スキル SKILL.md で一致（整形差正規化後）",
     )
-
-
-def check_env_table(repo):
-    """[env-table] 環境変数判定表（5行）が CLAUDE.md と共通ブロックでセル単位一致するか。"""
-    check_id = "env-table"
-    header_re = re.compile(r"出力値.*扱い")
-
-    # CLAUDE.md の判定表
-    claude_rows = parse_table_rows(repo.text(repo.claude_md), header_re)
-    problems = []
-    if claude_rows != ENV_TABLE_ROWS:
-        problems.append(
-            "CLAUDE.md の環境変数判定表が期待5行と一致しません\n"
-            + _table_diff(ENV_TABLE_ROWS, claude_rows)
-        )
-
-    # 各 SKILL.md 共通ブロック内の判定表
-    for skill in TEAM_SKILLS:
-        text = repo.text(repo.skill_md(skill))
-        block, _, _ = extract_common_block(text)
-        loc = rel(repo.root, repo.skill_md(skill))
-        if block is None:
-            problems.append(f"{loc}: 共通ブロックを抽出できず判定表を検査できません")
-            continue
-        rows = parse_table_rows(block, header_re)
-        if rows != ENV_TABLE_ROWS:
-            problems.append(
-                f"{loc}: 共通ブロック内の環境変数判定表が期待5行と一致しません\n"
-                + _table_diff(ENV_TABLE_ROWS, rows)
-            )
-
-    if problems:
-        return CheckResult(
-            check_id, False,
-            "環境変数判定表に不一致があります",
-            "\n".join("    " + p for p in problems),
-        )
-    return CheckResult(check_id, True, "環境変数判定表（5行）が CLAUDE.md と7スキル共通ブロックで一致")
-
-
-def _table_diff(expected, actual):
-    """テーブル行集合の差分を簡易表示する。"""
-    lines = []
-    exp_str = [" | ".join(r) for r in expected]
-    act_str = [" | ".join(r) for r in actual]
-    for line in difflib.unified_diff(exp_str, act_str, fromfile="期待", tofile="実際", lineterm=""):
-        lines.append("      " + line)
-    return "\n".join(lines)
 
 
 def check_meta_format(repo):
@@ -647,7 +555,6 @@ CHECKS = [
     check_frontmatter,
     check_common_block,
     check_fallback_msg,
-    check_env_table,
     check_meta_format,
     check_env_json,
     check_template_ref,

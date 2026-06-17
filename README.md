@@ -147,11 +147,11 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 
 ## Agent Teams オプション
 
-task-init を除く全スキルは `--team` オプションに対応しています。このオプションを使うと、Claude Code の Agent Teams 機能を活用して複数のエージェントが並行して作業します。トークン消費が増えますので、必要なときに限って `--team` を指定してください。
+task-init を除く全スキルは `--team` オプションに対応しています。このオプションを使うと、Claude Code の `Agent` ツールで複数のチームメイトを spawn し、並行して作業させます。`--team` を付けるだけで並列実行は起動します（環境変数の事前設定は不要）。トークン消費が増えますので、必要なときに限って `--team` を指定してください。
 
-### 有効化方法
+### （任意）SendMessage ライブ協調の有効化
 
-`~/.claude/settings.json` に以下を追加してください:
+チームメイト間の**ライブ通信**（`SendMessage`）を使いたい場合のみ、`~/.claude/settings.json` に以下を追加してください。これは **任意設定** であり、未設定でも `--team` による並列実行は問題なく起動します（`SendMessage` が使えない場合は各チームメイトの戻り値で成果を収集します）。
 
 ```json
 {
@@ -160,6 +160,8 @@ task-init を除く全スキルは `--team` オプションに対応していま
   }
 }
 ```
+
+> 環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` がゲートするのは `SendMessage`（teammate 間ライブ通信）のみです。`Agent` による spawn と `TaskCreate` / `TaskUpdate` による共有タスク管理はこの変数なしでも動作します。
 
 ### 使用例
 
@@ -183,11 +185,11 @@ Agent Teams はトークン消費が大幅に増加します（通常の2〜5倍
 
 ```bash
 python3 scripts/check_consistency.py        # 不一致のみ表示
-python3 scripts/check_consistency.py -v     # 全7検査の結果を表示
+python3 scripts/check_consistency.py -v     # 全6検査の結果を表示
 bash scripts/test/run_consistency_tests.sh  # 検査自体の回帰テスト
 ```
 
-検査内容は frontmatter / Agent Teams 共通ブロック / フォールバック文言 / 環境変数判定表 / メタ情報フォーマット / 環境変数 JSON / テンプレート参照の7種です。終了コードは `0`=整合 / `1`=不整合 / `2`=実行エラー。
+検査内容は frontmatter / Agent Teams 共通ブロック / フォールバック文言 / メタ情報フォーマット / 環境変数 JSON / テンプレート参照の6種です。終了コードは `0`=整合 / `1`=不整合 / `2`=実行エラー。
 
 - **ローカルフック**: `git config core.hooksPath scripts/hooks` で pre-commit フックを有効化すると、対象ファイル変更時に自動でチェックが走ります（対象外の変更は高速スキップ、緊急時は `git commit --no-verify` でバイパス可能）。整合性チェックはこのローカルフックで担保します（GitHub Actions による CI は使用していません）。
 
