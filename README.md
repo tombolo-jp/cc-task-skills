@@ -53,9 +53,21 @@ git config core.hooksPath scripts/hooks
 - **入力ファイル**: `.claude/tasks/{your-task-name}/init.md`
 - **作成ファイル**: `.claude/tasks/{your-task-name}/req.md`
 
-要件定義ファイル `req.md` が作成されます。必要に応じて修正してください。
+要件定義ファイル `req.md` が作成されます。末尾の「要確認事項」セクションに、確認が必要な項目が一問一答可能な箇条書きで一覧化されます。各項目の直下にインデントした子要素（`  - 回答内容`）で回答を追記し、次の `/task-req-update` で本文へ反映できます。
 
-#### 3. **詳細設計** `/task-design`
+#### 3. **要確認事項の反映** `/task-req-update`
+```bash
+/task-req-update your-task-name
+/task-req-update your-task-name --team   # Agent Teams モード（返信反映・整理確定を並行実施）
+```
+- **機能**: 「要確認事項」へのユーザー回答を req.md 本文へ反映し、確定版へ整理
+- **用途**: 要件定義書の要確認事項を解消し、詳細設計へ進める状態にする
+- **入力ファイル**: `.claude/tasks/{your-task-name}/req.md`
+- **更新ファイル**: 同 `req.md`（専用報告書は作成せず直接更新）
+
+各「要確認事項」項目の直下にインデント子要素で回答が付いていれば「解決済み」とみなし、その内容を本文へ反映して当該項目を削除します。回答のない項目は「未解決」として残置します。全項目が解決すると「要確認事項」セクション自体が削除され、req.md は確定版になります。未解決が残る場合は件数が提示されるので、回答を追記して再実行してください（「回答→再実行」ループ）。
+
+#### 4. **詳細設計** `/task-design`
 ```bash
 /task-design your-task-name
 /task-design your-task-name --team   # Agent Teams モード（データ設計・API設計・セキュリティ設計を並行実施）
@@ -66,7 +78,7 @@ git config core.hooksPath scripts/hooks
 
 詳細設計ファイル `design.md` が作成されます。内容を確認し、必要に応じて修正してください。
 
-#### 4. **ToDoリストと工数見積もり作成** `/task-todo`
+#### 5. **ToDoリストと工数見積もり作成** `/task-todo`
 ```bash
 /task-todo your-task-name
 /task-todo your-task-name --team   # Agent Teams モード（タスク分解・工数見積もりを並行実施）
@@ -77,7 +89,7 @@ git config core.hooksPath scripts/hooks
 
 ToDoリストと工数見積もりを統合したファイル `todo.md` が作成されます。各タスクの見積もり時間、リスク要因（不確実性レベル付き）、最少工数（楽観）・最大工数（悲観）の範囲見積もりを含みます。内容を確認し、必要に応じて修正してください。
 
-#### 5. **開発実行** `/task-dev`
+#### 6. **開発実行** `/task-dev`
 ```bash
 /task-dev your-task-name
 /task-dev your-task-name --team   # Agent Teams モード（独立したタスクを並行実装）
@@ -91,7 +103,7 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 
 開発完了後、チェックリスト付きの進捗状況、実装概要、変更ファイル一覧、技術的詳細を含む報告書 `dev-result.md` が作成されます。
 
-#### 6. **コードレビュー** `/task-review`
+#### 7. **コードレビュー** `/task-review`
 ```bash
 /task-review your-task-name
 /task-review your-task-name --team   # Agent Teams モード（要件整合性・コード品質・セキュリティを並行レビュー）
@@ -103,7 +115,7 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 
 レビュー報告書 `review.md` が作成されます。総合判定（修正不要/修正推奨/修正必須）、要件・設計との整合性、コード品質チェック、修正方針が含まれます。
 
-#### 7. **修正実行** `/task-fix`
+#### 8. **修正実行** `/task-fix`
 ```bash
 /task-fix your-task-name
 /task-fix your-task-name --team   # Agent Teams モード（独立した修正箇所を並行修正）
@@ -115,7 +127,7 @@ ToDoリストと工数見積もりを統合したファイル `todo.md` が作�
 
 修正報告書 `fix-result.md` が作成されます。指摘事項ごとの対応内容、変更ファイル一覧、動作確認結果が含まれます。
 
-#### 8. **手動検証** `/task-verify`
+#### 9. **手動検証** `/task-verify`
 ```bash
 /task-verify your-task-name
 /task-verify your-task-name --team   # Agent Teams モード（正常系・異常系・非機能の検証設計を並行実施）
@@ -166,7 +178,8 @@ task-init を除く全スキルは `--team` オプションに対応していま
 ### 使用例
 
 ```bash
-/task-req my-task --team      # 市場リサーチ・影響分析を並行実施
+/task-req my-task --team          # 市場リサーチ・影響分析を並行実施
+/task-req-update my-task --team   # 返信反映・整理確定を並行実施
 /task-design my-task --team   # データ設計・API設計・セキュリティ設計を並行実施
 /task-todo my-task --team     # タスク分解・工数見積もりを並行実施
 /task-dev my-task --team      # 独立したタスクを並行実装

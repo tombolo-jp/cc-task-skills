@@ -8,16 +8,17 @@ This repository contains a collection of custom skills for Claude Code that impl
 
 ## Skill Architecture
 
-The repository contains 8 interconnected skills that work together (task-init excluded from `--team` option support):
+The repository contains 9 interconnected skills that work together (task-init excluded from `--team` option support):
 
 1. **task-design** - Analyzes existing systems and creates technical design. Supports `--team` option.
 2. **task-dev** - Executes implementation based on todo list and creates development report. Supports `--team` option.
 3. **task-fix** - Fixes code based on review feedback. Supports `--team` option.
 4. **task-init** - Creates task environment and requirements gathering. Optionally fetches task content from a URL into init.md. (No `--team` support)
 5. **task-req** - Creates requirements draft from raw customer requests. Supports `--team` option.
-6. **task-review** - Reviews implementation against requirements, design, and code quality. Supports `--team` option.
-7. **task-todo** - Breaks down design into actionable development tasks with effort estimation. Supports `--team` option.
-8. **task-verify** - Generates manual verification procedure document. Supports `--team` option.
+6. **task-req-update** - Reflects user answers to the "要確認事項" (open questions) section back into req.md and consolidates it into a finalized version. Supports `--team` option.
+7. **task-review** - Reviews implementation against requirements, design, and code quality. Supports `--team` option.
+8. **task-todo** - Breaks down design into actionable development tasks with effort estimation. Supports `--team` option.
+9. **task-verify** - Generates manual verification procedure document. Supports `--team` option.
 
 Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
@@ -60,6 +61,7 @@ Each skill specifies an appropriate model alias via Frontmatter for optimal cost
 |-------|-------|-------|--------|
 | task-init | **Opus** | `opus` | URL content fetching (MCP/browser), verbatim transcription, summarization |
 | task-req | **Opus** | `opus` | High-precision design required |
+| task-req-update | **Opus** | `opus` | High-precision reflection of answers and req.md consolidation |
 | task-design | **Opus** | `opus` | High-precision design required |
 | task-todo | **Opus** | `opus` | High-precision planning and estimation |
 | task-dev | **Opus** | `opus` | High-precision implementation; avoids Sonnet 1M context API requirement |
@@ -67,7 +69,7 @@ Each skill specifies an appropriate model alias via Frontmatter for optimal cost
 | task-fix | **Opus** | `opus` | High-precision fixes; avoids Sonnet 1M context API requirement |
 | task-verify | **Opus** | `opus` | High-precision verification procedure generation |
 
-Model aliases are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models. All 8 skills now use the `opus` alias. The `sonnet` alias is intentionally avoided because Claude Code currently requires an API key for Sonnet's 1M context window, while Opus 1M is included in Pro/Max subscriptions without extra charge. (task-init was previously `haiku`, but was upgraded to `opus` when URL content fetching/transcription/summarization was added — see Key Skill Behaviors.)
+Model aliases are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models. All 9 skills now use the `opus` alias. The `sonnet` alias is intentionally avoided because Claude Code currently requires an API key for Sonnet's 1M context window, while Opus 1M is included in Pro/Max subscriptions without extra charge. (task-init was previously `haiku`, but was upgraded to `opus` when URL content fetching/transcription/summarization was added — see Key Skill Behaviors.)
 
 ## モデル確認の仕組み
 
@@ -101,7 +103,7 @@ Model aliases are used instead of full model IDs. This ensures automatic resolut
 
 ## Key Skill Behaviors
 
-> **フロー強制（全スキル共通）**: 8スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを `TaskCreate` で一括登録し、各フェーズを `in_progress` / `completed` で遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（「[設計原則: フローはツールで物理的に強制する](#設計原則-フローはツールで物理的に強制する)」の具体化）。`TaskCreate` / `TaskUpdate` が利用できない環境では地の文チェックリストへフォールバックする。**task-dev** は加えて、実行時に todo.md の各実装タスクを個別 Task として動的登録し、1件ずつ `in_progress` / `completed` 追跡する。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。
+> **フロー強制（全スキル共通）**: 9スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを `TaskCreate` で一括登録し、各フェーズを `in_progress` / `completed` で遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（「[設計原則: フローはツールで物理的に強制する](#設計原則-フローはツールで物理的に強制する)」の具体化）。`TaskCreate` / `TaskUpdate` が利用できない環境では地の文チェックリストへフォールバックする。**task-dev** は加えて、実行時に todo.md の各実装タスクを個別 Task として動的登録し、1件ずつ `in_progress` / `completed` 追跡する。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。
 
 ### /task-init {task_name} [URL]
 - Creates `.claude/tasks/{task_name}/` directory structure
@@ -118,7 +120,17 @@ Model aliases are used instead of full model IDs. This ensures automatic resolut
 - Reads raw customer requests from init.md
 - Analyzes and structures the information into req.md
 - Creates a draft requirements document from ambiguous requests
+- **要確認事項セクション**: Consolidates items needing confirmation into a "要確認事項" section at the end of req.md — plain (non-numbered) bullets written as self-contained, one-question-per-item prompts, keeping inline "（要確認）" markers in the body traceable to the list; section order is fixed as 要確認事項 → メタ情報 (metadata last)
 - **`--team` option**: Deploys a market/tech research agent and an impact analysis agent in parallel; team lead integrates results into req.md
+
+### /task-req-update {task_name} [--team]
+- Reads req.md and parses the "要確認事項" section at its end
+- Determines each item's resolution status by whether the user added an indented child element (reply) beneath it
+- Reflects resolved items' answers into the relevant body sections (replacing "（要確認）" markers with confirmed content) and removes those items from the list
+- Consolidates req.md into just the information needed for detailed design (task-design), conservatively preserving confirmed/functional/non-functional requirements and constraints
+- Leaves unresolved items in place; deletes the entire "要確認事項" section once all items are resolved
+- Reports the number of unresolved items and the re-run path, enabling an "answer → re-run" loop (idempotent). Directly updates req.md (no dedicated report file / template)
+- **`--team` option**: Deploys an answer-reflection agent and a consolidation agent in parallel; team lead judges unresolved items and finalizes req.md
 
 ### /task-design {task_name} [--team]
 - Reads req.md to understand task scope
@@ -171,7 +183,7 @@ Model aliases are used instead of full model IDs. This ensures automatic resolut
 
 ## Agent Teams オプション
 
-7つのスキル（task-init を除く全スキル）は `--team` オプションに対応しています。
+8つのスキル（task-init を除く全スキル）は `--team` オプションに対応しています。
 
 ### 使用方法
 
@@ -266,8 +278,8 @@ ToolSearch 結果の判定:
 
 | 検査ID | 内容 |
 |--------|------|
-| `frontmatter` | 全8スキルの `model: opus` / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（task-init とその他7で別ルール） |
-| `common-block` | 7スキル（task-init 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
+| `frontmatter` | 全9スキルの `model: opus` / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（task-init とその他8で別ルール） |
+| `common-block` | 8スキル（task-init 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
 | `fallback-msg` | フォールバック文言が CLAUDE.md と SKILL.md で一致するか（整形差を正規化して照合） |
 | `meta-format` | 5テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
 | `env-json` | CLAUDE.md / README.md の `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` が一致するか |
@@ -355,7 +367,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-06-17 14:00:10
+最終更新: 2026-07-10 17:20:00
+更新内容: 要確認事項の運用改善と `task-req-update` スキルの新設（タスク名 `req`、設計書 `.claude/tasks/req/design.md`）。要件定義フローに「要確認事項へのユーザー回答→本文反映」の対話ループを導入。**(1) task-req 改修**: 「更新時の注意点」を改修し、本文に簡易マーカー「（要確認）」を残しつつ確認事項の実体を req.md 末尾「要確認事項」セクションへ集約する規約（FR-1-1〜FR-1-5: 数字なし箇条書き／インデント返信前提／本文マーカーとの対応／セクション順 `要確認事項`→`メタ情報`）を追加。ステップ0 フェーズ4に要確認事項集約を内包（フェーズ数不変）。**(2) task-req-update 新設**: `skills/task-req-update/SKILL.md` を新規作成（テンプレート非保有）。要確認事項の各項目の直下にユーザーがインデント子要素で回答した内容を本文へ反映し、解決済み項目を削除、未解決は残置、全解決で「要確認事項」セクション自体を削除する冪等的な差分更新スキル。Agent Teams 共通ブロックは task-dev から sha256 一致で複製、役割分担は「返信反映担当／整理・確定担当」。**(3) 整合性チェック追従**: `check_consistency.py` の `TEAM_SKILLS` に `task-req-update` を追加（7→8、`ALL_SKILLS` は自動的に 9 件へ派生）。検査サマリの表示件数（frontmatter 全9・common-block 8・fallback-msg 8）を実数へ更新。6検査の構成・`CANONICAL_SKILL`・`TEMPLATE_FILES` は不変。**(4) ドキュメント同期**: CLAUDE.md（スキル数 8→9・一覧にアルファベット順で task-req-update 挿入・Model Configuration 表・Key Skill Behaviors の task-req 追記と task-req-update 節新設・Agent Teams 対応 7→8・整合性チェック節の件数）と README.md（使用方法にワークフロー順で task-req-update 追記・Agent Teams 対応一覧・使用例）を更新。最終 `python3 scripts/check_consistency.py` で全6検査 PASS（exit 0）・回帰テスト全 PASS を確認。
+
+前回更新: 2026-06-17 14:00:10
 更新内容: Agent Teams 機構を現行 Claude Code 仕様へ追従させる改修（タスク名 `team`、設計書 `.claude/tasks/team/design.md`）。最近の仕様変更で `TeamCreate` / `TeamDelete` が廃止され `--team` が常にフォールバックしていた問題を根治。**(1) 廃止 API 全廃**: `TeamCreate` / `TeamDelete` 依存を全スキル・全ドキュメントから削除し、チーム生成を `Agent` ツールの直接 spawn へ移行（`Agent` は core ツールでメイン会話に常在しロード不要）。成果収集は `Agent` の戻り値を主経路とする。**(2) env ハードゲート撤廃**: 実機検証（F-7）で `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` がゲートするのは `SendMessage`（teammate 間ライブ通信）のみと判明。`Agent` spawn と `TaskCreate` / `TaskUpdate` は変数なしで動作するため、env 変数を成立条件から除外し「SendMessage ライブ協調を使いたい場合の任意設定」へ格下げ。これにより `--team` だけで並列実行が起動する。**(3) 成立条件 3→2**: ①`--team` 指定 ②チームメイト 1 体以上稼働。env 変数・TeamCreate 条件を削除。**(4) 共通ブロック簡素化**: 環境変数判定表・ToolSearch（TeamCreate）判定・空チームクリーンアップ・二重フォールバックを撤廃し約半減。ロード対象を `select:TaskCreate,TaskUpdate,SendMessage` へ変更。**(5) フォールバック整理**: 文言①（env 設定依頼）を廃止、文言②を「⚠️ Agent Teams（チームメイトの起動）が現在の環境で利用できないため、Agent Teams モードを起動できません。今回は通常モードで実行します。」へ更新。発火条件を「`Agent` 不可 または spawn 失敗」のみへ限定。**(6) 整合性チェック追従**: `env-table` 検査を削除し 7→6 検査へ。`fallback-msg` 文言を更新、`env-json` は任意設定の記述として維持。メタ情報 3 値の文字列は不変（判定条件のみ再定義）。CLAUDE.md・README.md・7 SKILL.md・`check_consistency.py`・回帰テストを同期。
 
 前回更新: 2026-05-28 01:26:00

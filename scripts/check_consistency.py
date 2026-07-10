@@ -26,10 +26,11 @@ from pathlib import Path
 # 定数定義
 # ---------------------------------------------------------------------------
 
-# Agent Teams 対応スキル（task-init を除く7スキル）。common-block 検査対象。
+# Agent Teams 対応スキル（task-init を除く8スキル）。common-block 検査対象。
 TEAM_SKILLS = [
     "task-dev",
     "task-req",
+    "task-req-update",
     "task-design",
     "task-todo",
     "task-review",
@@ -312,7 +313,7 @@ def check_frontmatter(repo):
             "frontmatter 規約に不一致があります",
             "\n".join("    " + p for p in problems),
         )
-    return CheckResult(check_id, True, "全8スキルの model/disable-model-invocation/name/argument-hint 規約準拠")
+    return CheckResult(check_id, True, "全9スキルの model/disable-model-invocation/name/argument-hint 規約準拠")
 
 
 def check_common_block(repo):
@@ -362,7 +363,7 @@ def check_common_block(repo):
         )
     return CheckResult(
         check_id, True,
-        f"7スキルの Agent Teams 共通ブロックが {CANONICAL_SKILL} 基準と一致（sha256: {canonical_hash[:12]}…）",
+        f"8スキルの Agent Teams 共通ブロックが {CANONICAL_SKILL} 基準と一致（sha256: {canonical_hash[:12]}…）",
     )
 
 
@@ -422,7 +423,7 @@ def check_fallback_msg(repo):
         )
     return CheckResult(
         check_id, True,
-        "フォールバック文言②が CLAUDE.md と7スキル SKILL.md で一致（整形差正規化後）",
+        "フォールバック文言②が CLAUDE.md と8スキル SKILL.md で一致（整形差正規化後）",
     )
 
 
