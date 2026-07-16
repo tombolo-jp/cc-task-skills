@@ -1,7 +1,6 @@
 ---
 name: task-init
 description: タスク環境の初期化
-model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [<URL>]"
 ---

@@ -1,7 +1,6 @@
 ---
 name: task-req
 description: 顧客依頼から要件定義書を作成
-model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [--team]"
 ---

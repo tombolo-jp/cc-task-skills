@@ -1,7 +1,6 @@
 ---
 name: task-req-update
 description: 要確認事項へのユーザー回答を要件定義書へ反映し確定版へ整理
-model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [--team]"
 ---

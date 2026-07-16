@@ -1,7 +1,6 @@
 ---
 name: task-todo
 description: タスクのToDoリストと工数見積もりを作成
-model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [--team]"
 ---

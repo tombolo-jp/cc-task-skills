@@ -1,7 +1,6 @@
 ---
 name: task-review
 description: 開発成果物のコードレビューを実施
-model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [--team]"
 ---

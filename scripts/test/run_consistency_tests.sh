@@ -82,17 +82,17 @@ echo
 run_case "正常リポジトリ → exit 0" "${SNAPSHOT}" 0
 
 # ---------------------------------------------------------------------------
-# (1) frontmatter: model を opus 以外に書き換える
+# (1) frontmatter: 削除したはずの model 指定を再混入させる
 # ---------------------------------------------------------------------------
 F="$(make_fixture frontmatter)"
 /usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
-t = t.replace("model: opus", "model: sonnet", 1)
+t = t.replace("disable-model-invocation: true", "model: opus\ndisable-model-invocation: true", 1)
 open(p, "w", encoding="utf-8").write(t)
 PY
-run_case "frontmatter 異常（model: sonnet）→ exit 1" "${F}" 1 "[frontmatter]"
+run_case "frontmatter 異常（model 再混入）→ exit 1" "${F}" 1 "[frontmatter]"
 
 # ---------------------------------------------------------------------------
 # (2) common-block: task-review の共通ブロック内文言を1文字変える

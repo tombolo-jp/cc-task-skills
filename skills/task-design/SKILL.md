@@ -1,7 +1,6 @@
 ---
 name: task-design
 description: タスクの詳細設計を作成
-model: opus
 disable-model-invocation: true
 argument-hint: "<task_name> [--team]"
 ---

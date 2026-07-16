@@ -268,7 +268,7 @@ def make_diff(expected, actual, expected_label, actual_label):
 # ---------------------------------------------------------------------------
 
 def check_frontmatter(repo):
-    """[frontmatter] 全8スキルの model / disable-model-invocation / name / argument-hint 規約準拠。"""
+    """[frontmatter] 全9スキルの model 不在 / disable-model-invocation / name / argument-hint 規約準拠。"""
     check_id = "frontmatter"
     problems = []
     for skill in ALL_SKILLS:
@@ -280,13 +280,14 @@ def check_frontmatter(repo):
             problems.append(f"{loc}: frontmatter（---...---）が見つからない、または不正です")
             continue
 
-        # model: opus（全8必須）
-        if fm.get("model") != "opus":
+        # model は指定しない（全9共通・セッションモデルを継承させる）
+        if "model" in fm:
             problems.append(
-                f"{loc}: model は 'opus' であるべきですが '{fm.get('model')}' です"
+                f"{loc}: model は指定しないでください（セッションモデルを継承させるため）"
+                f"が '{fm.get('model')}' が指定されています"
             )
 
-        # disable-model-invocation: true（全8必須）
+        # disable-model-invocation: true（全9必須）
         if fm.get("disable-model-invocation") != "true":
             problems.append(
                 f"{loc}: disable-model-invocation は 'true' であるべきですが "
@@ -313,7 +314,7 @@ def check_frontmatter(repo):
             "frontmatter 規約に不一致があります",
             "\n".join("    " + p for p in problems),
         )
-    return CheckResult(check_id, True, "全9スキルの model/disable-model-invocation/name/argument-hint 規約準拠")
+    return CheckResult(check_id, True, "全9スキルの model 不在/disable-model-invocation/name/argument-hint 規約準拠")
 
 
 def check_common_block(repo):

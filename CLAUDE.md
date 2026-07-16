@@ -55,27 +55,31 @@ Each task follows a standardized directory structure:
 
 ## Model Configuration
 
-Each skill specifies an appropriate model alias via Frontmatter for optimal cost-performance balance:
+**全9スキルは frontmatter に `model` を指定しない。** スキル実行時のモデルは、呼び出し時点の**セッションモデルを継承**する。利用者は `/model` でモデルを切り替えてからスキルを実行することで、Opus / Sonnet / Fable を自由に選択できる。
 
-| Skill | Model | Alias | Reason |
-|-------|-------|-------|--------|
-| task-init | **Opus** | `opus` | URL content fetching (MCP/browser), verbatim transcription, summarization |
-| task-req | **Opus** | `opus` | High-precision design required |
-| task-req-update | **Opus** | `opus` | High-precision reflection of answers and req.md consolidation |
-| task-design | **Opus** | `opus` | High-precision design required |
-| task-todo | **Opus** | `opus` | High-precision planning and estimation |
-| task-dev | **Opus** | `opus` | High-precision implementation; avoids Sonnet 1M context API requirement |
-| task-review | **Opus** | `opus` | High-precision review required |
-| task-fix | **Opus** | `opus` | High-precision fixes; avoids Sonnet 1M context API requirement |
-| task-verify | **Opus** | `opus` | High-precision verification procedure generation |
+```bash
+/model sonnet     # 以降のスキル実行は Sonnet で走る
+/task-design my-task
+```
 
-Model aliases are used instead of full model IDs. This ensures automatic resolution to the latest model version when Anthropic updates models. All 9 skills now use the `opus` alias. The `sonnet` alias is intentionally avoided because Claude Code currently requires an API key for Sonnet's 1M context window, while Opus 1M is included in Pro/Max subscriptions without extra charge. (task-init was previously `haiku`, but was upgraded to `opus` when URL content fetching/transcription/summarization was added — see Key Skill Behaviors.)
+### なぜ `model` を指定しないのか
+
+- **frontmatter は静的に解決される。** `$ARGUMENTS` の置換はスキル本文にのみ適用されるため、`--model sonnet` のような**引数によるモデル指定は仕様上不可能**である。スキル本体から自身の実行モデルを変更する手段も存在しない。
+- **`model` を書くとセッション設定を上書きしてしまう。** frontmatter の `model` はセッションの `/model` 設定より優先され、スキル実行中だけ強制的に上書きされる（終了後にセッションモデルへ復帰）。したがって `model` を書いたままでは、利用者がどのモデルを選んでいても無視される。
+
+以上より、利用者にモデル選択を委ねる手段は「`model` を指定しない（＝継承）」以外に存在しない。**今後スキルを追加する際も `model` を指定しないこと**（`scripts/check_consistency.py` の `frontmatter` 検査が model の再混入を検出する）。
+
+### 補足: 精度とコストの考え方
+
+各スキルは高精度な設計・レビュー・実装を要求するため、**Opus 系の使用を推奨**する。ただしこれは利用者の判断に委ねる方針であり、スキル側では強制しない。軽量モデル（Haiku 等）のセッションでスキルを実行すると、生成物の品質が落ちうる点には留意すること。
+
+> **経緯（失効済み）**: 過去には「Claude Code で Sonnet の 1M context を使うには API キーが必須」という理由で全スキルを `opus` に固定していた。この制約は Sonnet 5 のリリース（2026-06-30 / Claude Code v2.1.197）で解消済みであり、現在 `sonnet` エイリアスは 1M context をネイティブに持ち追加課金なしで利用できる。この経緯は現行の設計判断の根拠ではない。
 
 ## モデル確認の仕組み
 
 各コマンドは、出力する報告書の末尾に「メタ情報」セクションを含めます。
 スキル本体が自己申告する形で、実際に使用されたモデル名と実行日時が記録されます。
-これにより、ユーザーは生成物が想定したモデルで作成されたか確認できます。
+スキル側でモデルを固定しない（セッションモデルを継承する）方針のため、生成物がどのモデルで作成されたかはこの自己申告が唯一の記録となります。
 
 ### メタ情報のフォーマット
 
@@ -367,7 +371,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-07-10 17:20:00
+最終更新: 2026-07-16 00:00:00
+更新内容: 全9スキルの frontmatter から `model: opus` を削除し、**セッションモデル継承**方式へ変更。利用者が `/model` で Opus / Sonnet / Fable を自由に選択できるようにした。**(1) 判断根拠**: frontmatter は静的に解決され `$ARGUMENTS` 置換の対象外のため、引数によるモデル指定は仕様上不可能。かつ frontmatter の `model` はセッションの `/model` 設定より優先されるため、`model` を書いたままでは利用者の選択が無視される。したがって「`model` を指定しない」が利用者にモデル選択を委ねる唯一の手段。**(2) 旧根拠の失効**: 「Sonnet の 1M context は API キー必須」（2026-05-16 に opus 統一を決めた理由）は Sonnet 5 リリース（2026-06-30 / Claude Code v2.1.197）で解消済み。現在 `sonnet` は 1M context をネイティブに持ち追加課金不要。**(3) 整合性チェック追従**: `check_consistency.py` の `frontmatter` 検査を「`model` が `opus` であること」から「`model` が存在しないこと」へ反転（6検査の構成は不変）。回帰テスト fixture も `model: opus` への書き換えから `model` 再混入へ変更。**(4) ドキュメント同期**: CLAUDE.md の「Model Configuration」節をモデル表からセッションモデル継承の方針説明へ全面改稿（旧根拠は失効注記つきで保存）、「モデル確認の仕組み」の説明を調整。README.md に「使用するモデルの選択」節を新設（`/model` の使い方・Opus 推奨・メタ情報での確認）。**(5) 未変更**: メタ情報セクションの自己申告フォーマット（3行・3値表記）、Agent Teams 機構、テンプレート5件。最終 `python3 scripts/check_consistency.py` で全6検査 PASS（exit 0）・回帰テスト 7/7 PASS を確認。
+
+前回更新: 2026-07-10 17:20:00
 更新内容: 要確認事項の運用改善と `task-req-update` スキルの新設（タスク名 `req`、設計書 `.claude/tasks/req/design.md`）。要件定義フローに「要確認事項へのユーザー回答→本文反映」の対話ループを導入。**(1) task-req 改修**: 「更新時の注意点」を改修し、本文に簡易マーカー「（要確認）」を残しつつ確認事項の実体を req.md 末尾「要確認事項」セクションへ集約する規約（FR-1-1〜FR-1-5: 数字なし箇条書き／インデント返信前提／本文マーカーとの対応／セクション順 `要確認事項`→`メタ情報`）を追加。ステップ0 フェーズ4に要確認事項集約を内包（フェーズ数不変）。**(2) task-req-update 新設**: `skills/task-req-update/SKILL.md` を新規作成（テンプレート非保有）。要確認事項の各項目の直下にユーザーがインデント子要素で回答した内容を本文へ反映し、解決済み項目を削除、未解決は残置、全解決で「要確認事項」セクション自体を削除する冪等的な差分更新スキル。Agent Teams 共通ブロックは task-dev から sha256 一致で複製、役割分担は「返信反映担当／整理・確定担当」。**(3) 整合性チェック追従**: `check_consistency.py` の `TEAM_SKILLS` に `task-req-update` を追加（7→8、`ALL_SKILLS` は自動的に 9 件へ派生）。検査サマリの表示件数（frontmatter 全9・common-block 8・fallback-msg 8）を実数へ更新。6検査の構成・`CANONICAL_SKILL`・`TEMPLATE_FILES` は不変。**(4) ドキュメント同期**: CLAUDE.md（スキル数 8→9・一覧にアルファベット順で task-req-update 挿入・Model Configuration 表・Key Skill Behaviors の task-req 追記と task-req-update 節新設・Agent Teams 対応 7→8・整合性チェック節の件数）と README.md（使用方法にワークフロー順で task-req-update 追記・Agent Teams 対応一覧・使用例）を更新。最終 `python3 scripts/check_consistency.py` で全6検査 PASS（exit 0）・回帰テスト全 PASS を確認。
 
 前回更新: 2026-06-17 14:00:10
