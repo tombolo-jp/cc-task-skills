@@ -3,7 +3,7 @@
 #
 # 方針:
 #   1. 正常リポジトリ（このリポジトリ自身）を --root で検査 → exit 0 を確認。
-#   2. 6検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
+#   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
 #      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
 #
 # 依存: bash / python3 / 標準コマンドのみ（テストフレームワーク不使用）。
@@ -179,6 +179,47 @@ t = t.replace(
 open(p, "w", encoding="utf-8").write(t)
 PY
 run_case "template-ref 異常（絶対パス再混入）→ exit 1" "${F}" 1 "[template-ref]"
+
+# ---------------------------------------------------------------------------
+# (7) flow-checklist: 廃止済みツール名を task-review のステップ0 へ再混入
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-tool)"
+/usr/bin/python3 - "${F}/skills/task-review/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace(
+    "> **禁止事項**: (a) チェックリスト宣言の省略、",
+    "> 各フェーズは `TaskUpdate` で状態遷移させます。\n>\n"
+    "> **禁止事項**: (a) チェックリスト宣言の省略、",
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "flow-checklist 異常（廃止ツール名の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
+
+# ---------------------------------------------------------------------------
+# (8) flow-checklist: ステップ0 見出しごと削除して構造確認を落とす
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-step0)"
+/usr/bin/python3 - "${F}/skills/task-todo/SKILL.md" <<'PY'
+import re
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().splitlines(keepends=True)
+start = None
+out = []
+for i, ln in enumerate(lines):
+    if start is None and ln.startswith("### ステップ0"):
+        start = i
+        continue
+    if start is not None and ln.startswith("### ") :
+        start = None
+    if start is None:
+        out.append(ln)
+open(p, "w", encoding="utf-8").write("".join(out))
+PY
+run_case "flow-checklist 異常（ステップ0 節の欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # 集計

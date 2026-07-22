@@ -65,6 +65,17 @@ META_DATETIME_LINE = "- 実行日時: [日時]"
 # env-json で両ファイルに存在すべき行（前後空白は無視して比較）。
 ENV_JSON_LINE = '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"'
 
+# flow-checklist: 廃止済みのタスク登録／更新ツール名（本文への再混入を禁止する）。
+# ハーネス側から提供されなくなったため、これらを参照する記述は動作しない指示となる。
+OBSOLETE_TOOL_RE = re.compile(r"Task(?:Create|Update)")
+
+# flow-checklist: CLAUDE.md でこの見出し以降は歴史的記録として走査対象から除外する。
+HISTORY_HEADING = "## 更新履歴"
+
+# flow-checklist: 全9スキルのステップ0 節に含まれるべき語（宣言方式の構造確認）。
+STEP0_HEADING_RE = re.compile(r"^### ステップ0")
+STEP0_REQUIRED_TERMS = ["チェックリスト", "省略不可"]
+
 
 # ---------------------------------------------------------------------------
 # CheckResult データ構造
@@ -552,6 +563,88 @@ def check_template_ref(repo):
     )
 
 
+def _extract_step0_section(text):
+    """SKILL.md から `### ステップ0` 節を抽出する。
+
+    範囲: `### ステップ0` で始まる行 〜 次の `## ` / `### ` 見出しの直前（`#### ` は節内扱い）。
+    見つからなければ None。
+    """
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if start is None:
+            if STEP0_HEADING_RE.match(line):
+                start = i
+            continue
+        if line.startswith("### ") or (line.startswith("## ") and not line.startswith("### ")):
+            return "\n".join(lines[start:i])
+    if start is None:
+        return None
+    return "\n".join(lines[start:])
+
+
+def check_flow_checklist(repo):
+    """[flow-checklist] 廃止済みツール名の再混入検出＋全9スキルのステップ0 構造確認。
+
+    - 検出: 全9 SKILL.md / CLAUDE.md / README.md / 5テンプレートに `TaskCreate` `TaskUpdate` が
+      残存していないか。CLAUDE.md のみ `## 更新履歴` 以降を歴史的記録として除外する。
+    - 構造: 全9 SKILL.md に `### ステップ0` 見出しが存在し、その節に「チェックリスト」「省略不可」が
+      含まれること（宣言方式であることの担保）。
+    """
+    check_id = "flow-checklist"
+    problems = []
+
+    # --- 目的1: 廃止済みツール名の残存検出 ---
+    targets = [repo.skill_md(s) for s in ALL_SKILLS]
+    targets += [repo.template_md(s) for s in TEMPLATE_FILES]
+    targets += [repo.claude_md, repo.readme_md]
+
+    for path in targets:
+        text = repo.text(path)
+        loc = rel(repo.root, path)
+        lines = text.splitlines()
+        # CLAUDE.md は更新履歴節以降を除外（歴史的記録は据え置き）
+        limit = len(lines)
+        if path == repo.claude_md:
+            for i, line in enumerate(lines):
+                if line.strip() == HISTORY_HEADING:
+                    limit = i
+                    break
+        for lineno, line in enumerate(lines[:limit], 1):
+            if OBSOLETE_TOOL_RE.search(line):
+                problems.append(
+                    f"{loc}:{lineno}: 廃止済みのタスク登録／更新ツール名が再混入しています: "
+                    f"{line.strip()}"
+                )
+
+    # --- 目的2: ステップ0 の構造確認 ---
+    for skill in ALL_SKILLS:
+        path = repo.skill_md(skill)
+        text = repo.text(path)
+        loc = rel(repo.root, path)
+        section = _extract_step0_section(text)
+        if section is None:
+            problems.append(f"{loc}: `### ステップ0` 見出しが見つかりません")
+            continue
+        missing = [t for t in STEP0_REQUIRED_TERMS if t not in section]
+        if missing:
+            problems.append(
+                f"{loc}: ステップ0 節にチェックリスト宣言方式の記述がありません"
+                f"（不足: {' / '.join(missing)}）"
+            )
+
+    if problems:
+        return CheckResult(
+            check_id, False,
+            "フローのチェックリスト宣言方式に不整合があります",
+            "\n".join("    " + p for p in problems),
+        )
+    return CheckResult(
+        check_id, True,
+        "廃止済みツール名の再混入なし・全9スキルのステップ0 がチェックリスト宣言方式",
+    )
+
+
 # 実行する検査関数の一覧（順序が出力順）。
 CHECKS = [
     check_frontmatter,
@@ -560,6 +653,7 @@ CHECKS = [
     check_meta_format,
     check_env_json,
     check_template_ref,
+    check_flow_checklist,
 ]
 
 

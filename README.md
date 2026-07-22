@@ -22,7 +22,7 @@ git config core.hooksPath scripts/hooks
 
 ## 使用方法
 
-> **フロー強制について**: 各スキルは「手順」冒頭のステップ0で自身の全フェーズを Task として登録し、`in_progress` / `completed` で状態遷移させながら進みます。これにより、フェーズのスキップ・実装の早すぎる着手・手順の取りこぼしを構造的に防ぎます（地の文の手順記述だけに頼りません）。Task ツールが使えない環境では地の文チェックリストへ自動的にフォールバックします。
+> **フロー強制について**: 各スキルは「手順」冒頭のステップ0で自身の全フェーズを `- [ ]` 形式のチェックリストとして宣言し、各フェーズの完了ごとに一覧を再掲して `- [x]` へ更新しながら進みます。これにより、フェーズのスキップ・実装の早すぎる着手・手順の取りこぼしを構造的に防ぎます（地の文の手順記述だけに頼りません）。宣言は省略不可の必須要素として扱われます。
 
 ### 基本的なワークフロー
 
@@ -189,7 +189,7 @@ task-init を除く全スキルは `--team` オプションに対応していま
 }
 ```
 
-> 環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` がゲートするのは `SendMessage`（teammate 間ライブ通信）のみです。`Agent` による spawn と `TaskCreate` / `TaskUpdate` による共有タスク管理はこの変数なしでも動作します。
+> 環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` がゲートするのは `SendMessage`（teammate 間ライブ通信）のみです。`Agent` による spawn と、チームリードのチェックリストによる進捗追跡はこの変数なしでも動作します。
 
 ### 使用例
 
@@ -214,11 +214,11 @@ Agent Teams はトークン消費が大幅に増加します（通常の2〜5倍
 
 ```bash
 python3 scripts/check_consistency.py        # 不一致のみ表示
-python3 scripts/check_consistency.py -v     # 全6検査の結果を表示
+python3 scripts/check_consistency.py -v     # 全7検査の結果を表示
 bash scripts/test/run_consistency_tests.sh  # 検査自体の回帰テスト
 ```
 
-検査内容は frontmatter / Agent Teams 共通ブロック / フォールバック文言 / メタ情報フォーマット / 環境変数 JSON / テンプレート参照の6種です。終了コードは `0`=整合 / `1`=不整合 / `2`=実行エラー。
+検査内容は frontmatter / Agent Teams 共通ブロック / フォールバック文言 / メタ情報フォーマット / 環境変数 JSON / テンプレート参照 / フローチェックリスト（廃止済みツール名の再混入検出とステップ0 の構造確認）の7種です。終了コードは `0`=整合 / `1`=不整合 / `2`=実行エラー。
 
 - **ローカルフック**: `git config core.hooksPath scripts/hooks` で pre-commit フックを有効化すると、対象ファイル変更時に自動でチェックが走ります（対象外の変更は高速スキップ、緊急時は `git commit --no-verify` でバイパス可能）。整合性チェックはこのローカルフックで担保します（GitHub Actions による CI は使用していません）。
 
