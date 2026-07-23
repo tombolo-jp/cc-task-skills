@@ -5,6 +5,8 @@
 #   1. 正常リポジトリ（このリポジトリ自身）を --root で検査 → exit 0 を確認。
 #   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
 #      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
+#      検査によっては観点ごとに複数の fixture を持つ（例: frontmatter は model 再混入と
+#      argument-hint 例外の差し戻しの2件）。
 #
 # 依存: bash / python3 / 標準コマンドのみ（テストフレームワーク不使用）。
 # CI 組込み可: このスクリプトの終了コードが 0 なら全テスト合格。
@@ -220,6 +222,25 @@ for i, ln in enumerate(lines):
 open(p, "w", encoding="utf-8").write("".join(out))
 PY
 run_case "flow-checklist 異常（ステップ0 節の欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
+
+# ---------------------------------------------------------------------------
+# (9) frontmatter: task-dev の argument-hint を旧値（既定値）へ差し戻す
+#     ARGUMENT_HINT_OVERRIDES による例外が効いていること自体を検証する。
+#     例外を消して既定値へフォールバックさせる実装ミスは、この fixture でのみ検出できる。
+# ---------------------------------------------------------------------------
+F="$(make_fixture frontmatter-argument-hint)"
+/usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace(
+    'argument-hint: "<task_name>[,<task_name>...] [--team]"',
+    'argument-hint: "<task_name> [--team]"',
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "frontmatter 異常（task-dev の argument-hint 差し戻し）→ exit 1" "${F}" 1 "[frontmatter]"
 
 # ---------------------------------------------------------------------------
 # 集計

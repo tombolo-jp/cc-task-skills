@@ -11,7 +11,7 @@ This repository contains a collection of custom skills for Claude Code that impl
 The repository contains 9 interconnected skills that work together (task-init excluded from `--team` option support):
 
 1. **task-design** - Analyzes existing systems and creates technical design. Supports `--team` option.
-2. **task-dev** - Executes implementation based on todo list and creates development report. Supports `--team` option.
+2. **task-dev** - Executes implementation based on todo list and creates development report. Supports `--team` option. **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
 3. **task-fix** - Fixes code based on review feedback. Supports `--team` option.
 4. **task-init** - Creates task environment and requirements gathering. Optionally fetches task content from a URL into init.md. (No `--team` support)
 5. **task-req** - Creates requirements draft from raw customer requests. Supports `--team` option.
@@ -155,7 +155,7 @@ Each task follows a standardized directory structure:
 - Keeps task count to 8–12 by merging work on the same file or class; avoids anchoring on any pre-existing estimate found in design.md
 - **`--team` option**: Deploys a decomposition/roll-up agent and a **reduction reviewer** (asymmetric roles — the reviewer's job is to cut effort and to reject estimates failing the sanity check); team lead integrates results into todo.md
 
-### /task-dev {task_name} [--team]
+### /task-dev {task_name}[,{task_name}...] [--team]
 - Reads design.md and todo.md to understand implementation requirements
 - Reads report template from `templates/dev-result-template.md`
 - Implements tasks sequentially following the todo list
@@ -163,6 +163,13 @@ Each task follows a standardized directory structure:
 - Reports progress after each task completion
 - Creates dev-result.md with implementation overview, changed files, technical details, and completion report
 - **`--team` option**: Analyzes todo.md dependencies and assigns independent tasks to parallel agents; file-level work splitting prevents concurrent edit conflicts
+- **Comma-separated multi-task mode (task-dev only)**: The 1st argument accepts `task1,task2,task3` to implement several tasks in one invocation. Whether the specifier contains a comma is evaluated **before** the `--team` branch, and it selects the execution mode:
+  - **Parsing**: separator is `,` only; whitespace around commas, empty elements (`t1,,t2` / trailing comma), and task names outside `^[A-Za-z0-9._-]+$` are **errors** (immediate exit, nothing written). Duplicates are de-duplicated with a warning. A specifier without a comma keeps the legacy single-task behavior byte-for-byte
+  - **Pre-flight checks**: aborts entirely if not a git repository or if the working tree is dirty (the uncommitted file list is shown); per task, missing `design.md` / `todo.md` → skip (deliverable missing), existing `dev-result.md` → skip (already implemented). The target count is displayed without asking for confirmation
+  - **Delegation**: each task's implementation is delegated to an independent `general-purpose` subagent (synchronous, sequential — never parallel) so context does not accumulate across tasks. The subagent returns a fixed-format `STATUS` / `FILES` / `SUMMARY` payload; a malformed return is treated as a failure
+  - **Commit per task**: stages only the files the subagent reported (`git add -- <paths>`; `git add -A` is prohibited) and commits with the task name as the message. No push, no branch operations, commits land on the branch active at start-up
+  - **`--team` exclusivity**: with a comma-separated specifier, `--team` is ignored with a warning (a subagent cannot spawn further subagents). Single-task invocations keep full `--team` support
+  - **Failure handling / idempotency**: a failed task aborts the run; already-committed tasks stay committed and are auto-skipped on re-run. A per-task result summary is always printed (success or abort)
 
 ### /task-review {task_name} [--team]
 - Reads req.md, design.md, todo.md, and dev-result.md to understand full context
@@ -278,6 +285,13 @@ ToolSearch 結果の判定:
 /task-dev my-task --team  # Agent Teams モードで実行
 ```
 
+`task-dev` のカンマ区切り指定（複数タスクモード）では、コンテキスト分離を優先するため `--team` は利用できません。同時に指定された場合は警告を表示のうえ `--team` を無視し、複数タスクモードで続行します。
+
+```bash
+/task-dev task1,task2,task3         # 複数タスクを逐次実装（タスクごとにコミット）
+/task-dev task1,task2 --team        # --team は無視され、複数タスクモードで実行
+```
+
 ## 整合性チェック
 
 本プロジェクトは「単一ファイル制約（include 機構なし）」のため、Agent Teams 共通ブロック・フォールバック文言・メタ情報フォーマット・テンプレート参照などの定型文が複数ファイルに重複して存在する。この重複は許容したうえで、ファイル間のズレを機械的に検出するのが `scripts/check_consistency.py`（Python 3 標準ライブラリのみ・サードパーティ依存ゼロ）である。
@@ -286,7 +300,7 @@ ToolSearch 結果の判定:
 
 | 検査ID | 内容 |
 |--------|------|
-| `frontmatter` | 全9スキルの `model` 不在 / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（task-init とその他8で別ルール） |
+| `frontmatter` | 全9スキルの `model` 不在 / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（既定は `<task_name> [--team]`。固有の引数を持つスキルのみ `ARGUMENT_HINT_OVERRIDES` で例外化する。現在の例外は **task-init**（URL 用）と **task-dev**（カンマ区切りの複数タスク用）の2件） |
 | `common-block` | 8スキル（task-init 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
 | `fallback-msg` | フォールバック文言が CLAUDE.md と SKILL.md で一致するか（整形差を正規化して照合） |
 | `meta-format` | 5テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
@@ -376,7 +390,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-07-22 23:15:47
+最終更新: 2026-07-24 00:16:59
+更新内容: `task-dev` に **カンマ区切りによる複数タスク一括実行機能** を追加（タスク名 `bulk`、設計書 `.claude/tasks/bulk/design.md`）。**(1) 背景**: 従来 `task-dev` は単一タスクしか取れず、複数タスクを実装するには人手で N 回起動する必要があった。同一セッションで連続実装するとタスクをまたいでコンテキスト（読み込んだファイル・中間出力）が蓄積し、後半のタスクほど品質が落ちる。**(2) 方式**: `/clear` はモデルから呼び出せず `context: fork` は Agent Teams 成立要件と衝突するため、コンテキスト分離は **`Agent` ツールによるサブエージェント委譲** で実現した。メイン会話に残るのは各タスクの戻り値（数十行の固定フォーマット）のみとなり、タスク数に対してコンテキストが線形累積しない。**(3) SKILL.md 改訂**（177→409行）: 「引数の解釈」節へ `### 実行モードの判定【共通ブロックより先に評価】` を新設し、パース規則 R-1〜R-8（区切りは `,` のみ／カンマ前後の空白・空要素・`^[A-Za-z0-9._-]+$` 外の文字はエラー／重複は先頭1件／複数指定時は `--team` を無視）とエラー・警告文言を規定。カンマの有無によるモード判定を `--team` 判定より上位に置き、複数タスクモードでは共通ブロックを「`--team` を含まない場合」として評価させる前処理規則で整合させた。ステップ0 のフェーズ宣言を単一／複数の2系列へ拡張、ステップ1〜4 に「単一タスクモード」の条件を明示（文言は不変＝後方互換）、**ステップ5（複数タスクモードの実行手順）を新設**（5-1 事前検証 V-1〜V-5 ／ 5-2 件数表示 ／ 5-3 サブエージェント委譲・戻り値契約 A-1〜A-5・コミット規則 C-1〜C-8 と git 操作の安全境界表 ／ 5-4 エラー分類 E-1〜E-12 ／ 5-5 サマリ）。「完了後」節をモード別に分割し FR-7 のサマリ表を追加。**(4) 安全策**: 本スキル群で初めてリポジトリ状態を変更する機能のため、着手前のワーキングツリー清浄性チェックで中断する仕様とし、ステージングは**サブエージェントが申告したファイルのみ**（`git add -A` / `git add .` / `git commit -a` を明示的に禁止列挙）、`git push`・ブランチ操作・`git reset --hard` 等の破壊的操作を禁止。サブエージェント側にも git 状態変更操作と他タスクディレクトリへの書き込みを禁じた。中断後の再実行は完了済みタスクが `dev-result.md` の存在で自動スキップされ冪等に再開できる。**(5) 整合性チェック追従**: `frontmatter` 検査の `argument-hint` 期待値を三項演算子から `ARGUMENT_HINT_OVERRIDES` dict へ変更（`ARGUMENT_HINT_INIT` は dict へ吸収し削除）。task-dev の期待値は `<task_name>[,<task_name>...] [--team]`。回帰テストに異常系 fixture 1件（task-dev の argument-hint を既定値へ差し戻すと `[frontmatter]` が exit 1 になること＝例外が実際に効いていることの検証）を追加し 9→10 ケースへ。**(6) 実測による裏取り**: `common-block` の保護範囲が SKILL.md 29〜84 行であることを着手前スパイクで実測し、編集を「引数の解釈」節前半と `#### 役割分担` 以降の2領域に限定したため、**他8スキルへの波及はゼロ**（`common-block` sha256 不変）。あわせて `_extract_blockquote_messages` が `> ⚠️` 行を集合として収集し包含判定するのみと判明したが、設計方針どおり新設の警告文はコードフェンス記述とした。**(7) 未変更**: Agent Teams 共通ブロック、成立2条件、フォールバック文言、`env-json`、`dev-result-template.md`、他8スキルの SKILL.md。最終 `python3 scripts/check_consistency.py` で全7検査 PASS（exit 0）・回帰テスト 10/10 PASS を確認。
+
+前回更新: 2026-07-22 23:15:47
 更新内容: `task-todo` の工数見積もりが構造的に過大化する問題を修正。**(1) 事象**: 実運用中のプロジェクトで、新規コード約500行・実装9h 相当のタスクに対し **102h（12.8人日）** という見積もりが出力された（4.9行/h）。同一プロジェクトの過去4件（9.5h / 17.5h / 29h / 31.5h）は妥当な水準であり、`--team` の有無とも相関しないことから、スキル全体の欠陥ではなく特定条件下での暴発と特定した。**(2) 5つの原因**: ①前提条件が「中級プログラマ（実務経験3-5年）」固定で、設計読解・関係者調整・レビュー対応といった「コードを書かない工数」を正当化していた ②リスク→バッファの指示が加算方向のみで（旧規定「不確実性が高い場合は ±50〜100%」）、減算する検算が存在しなかった ③合計工数の妥当性を検出する仕組みが皆無で、積み上げ式のため個々のタスクが妥当に見えれば破綻に気づけない ④タスク粒度の規定がなく28タスクに細分化され、各タスクの切り上げだけで下限が積み上がった ⑤`--team` の2担当（タスク分解／工数見積もり）がともに「漏れを見つける」役で、上方向にしか圧力がかからずリードは両者を加算するだけだった。加えて design.md に既存の見積もりが記載されていた場合、それを「検証・補正する」立場に固定されて指摘が加算方向にしか出ないアンカリングも確認した。**(3) SKILL.md 改訂**: 前提条件を「このコードベースを熟知した開発者」へ変更し、計上しないもの（設計書の読解／既存コード調査／関係者調整＝ブロッカーとして別管理／カレンダー上のリードタイム）を表で明示、レビュー対応は実装工数の15%を上限と規定。ステップ2 に 2-1（アンカリング回避：既存見積もりは自分で積み上げた後に照合し、自分の積み上げを正とする）・2-2（タスク粒度8〜12件、20件超で統合、同一ファイル／同一クラスは1タスク）・2-3（不確実性は青天井バッファではなく30分〜1時間のスパイクへ変換し二択に落とす）を新設。**ステップ3「コード量サニティチェック」を新設**（`新規・変更コード行数 ÷ 実装工数 = ?行/h` を必須計算。既存パターン流用80〜150行/h・新規性が高い40〜80行/h を基準とし、**30行/h 未満は過大としてステップ2へ差し戻し**、150行/h 超は過小として設計の読み落としを確認。結果は todo.md へ記載必須）。以降のステップを繰り下げ（テンプレート読み込み→4、ToDoリスト作成→5）、ステップ0 のフェーズ宣言も6→7項目へ。「ToDoリスト構成」に **3層構成（§0 事前スパイク／§A 実装工数／§B 付帯工程）を必須化**し、バッファ規定を「§A は ±30%（設計未確定なら ±50%）、§B は係数を掛けず下限〜上限をそのまま提示（二値で決まるものに係数は無意味）、§0 で判定済みの項目はバッファに含めない」へ全面改訂（旧規定 ±50〜100% は廃止注記つきで経緯を保存）。**(4) Agent Teams の役割を非対称化**: 「タスク分解担当／工数見積もり担当」を「**分解・積み上げ担当／削減レビュア**」へ変更。削減レビュアには既存コードの流用可能性の洗い出し、サニティチェックの実施と**差し戻し権限**、青天井バッファのスパイク変換提案を担わせ、「減らすことが仕事」と依頼プロンプトに明記させる。あわせて「チームメイトへの依頼時の禁止事項」節を新設し、「リスクを厳しく評価してください」等の**上方バイアスを注入する指示を禁止**（今回の暴発でリードが実際に出していた指示）。統合時は削減レビュアの指摘を不採用とする場合に理由を todo.md へ残すことを義務化。**(5) テンプレート全面改訂**: `todo-template.md` を22行→175行へ拡張。従来はリスク要因／バッファ計算／最終見積もりの末尾断片のみだったものを、前提条件・見積もりの構成・実コードでの裏取り・工数サマリー・**サニティチェック記入欄**・§0/§A/§B の3層・優先度（ブロッカー区分を新設）・リスク要因・バッファ・最終見積もり・提示にあたっての推奨まで含む todo.md 全体の骨格とした。`## メタ情報` の3行（3値表記）は不変（`meta-format` 検査 PASS）。**(6) 検証**: 改訂後のルールで問題の事例を再計算すると、初版はサニティチェック（4.9行/h）とタスク粒度（28件）とアンカリング回避の3点で停止し、改訂版（実装9h／約500行＝55行/h・9タスク）は「新規性が高いコード 40〜80行/h」の範囲に収まって通過することを確認。**(7) 未変更**: Agent Teams 共通ブロック（`#### 役割分担` の直前までが検査範囲のため `common-block` 検査 PASS）、成立2条件、フォールバック文言、`env-json`、他8スキル。最終 `python3 scripts/check_consistency.py` で全7検査 PASS（exit 0）を確認。
 
 前回更新: 2026-07-22 00:00:00

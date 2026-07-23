@@ -53,9 +53,13 @@ TEMPLATE_FILES = {
     "task-verify": "verify-template.md",
 }
 
-# frontmatter の argument-hint 期待値（init は URL 用で別ルール、他7は --team 用）。
-ARGUMENT_HINT_INIT = "<task_name> [<URL>]"
+# frontmatter の argument-hint 期待値。既定は --team 用の1形式とし、
+# 固有の引数を持つスキルのみ ARGUMENT_HINT_OVERRIDES で例外を宣言する（design D-7）。
 ARGUMENT_HINT_TEAM = "<task_name> [--team]"
+ARGUMENT_HINT_OVERRIDES = {
+    "task-init": "<task_name> [<URL>]",                     # 第2引数に取得元 URL を取る
+    "task-dev": "<task_name>[,<task_name>...] [--team]",    # 第1引数にカンマ区切りの複数タスクを取る
+}
 
 # メタ情報 Agent Teams 行の3値表記（厳密一致）。
 META_AGENT_TEAMS_LINE = "- Agent Teams: [有効 / 無効（指定なし） / 無効（フォールバック）]"
@@ -311,9 +315,9 @@ def check_frontmatter(repo):
                 f"{loc}: name はディレクトリ名 '{skill}' と一致すべきですが '{fm.get('name')}' です"
             )
 
-        # argument-hint（init は別ルール）
+        # argument-hint（固有の引数を持つスキルは ARGUMENT_HINT_OVERRIDES で例外化）
         hint = strip_quotes(fm.get("argument-hint", ""))
-        expected_hint = ARGUMENT_HINT_INIT if skill == "task-init" else ARGUMENT_HINT_TEAM
+        expected_hint = ARGUMENT_HINT_OVERRIDES.get(skill, ARGUMENT_HINT_TEAM)
         if hint != expected_hint:
             problems.append(
                 f"{loc}: argument-hint は '{expected_hint}' であるべきですが '{hint}' です"
