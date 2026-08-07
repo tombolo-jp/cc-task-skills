@@ -69,16 +69,20 @@ META_DATETIME_LINE = "- 実行日時: [日時]"
 # env-json で両ファイルに存在すべき行（前後空白は無視して比較）。
 ENV_JSON_LINE = '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"'
 
-# flow-checklist: 廃止済みのタスク登録／更新ツール名（本文への再混入を禁止する）。
-# ハーネス側から提供されなくなったため、これらを参照する記述は動作しない指示となる。
-OBSOLETE_TOOL_RE = re.compile(r"Task(?:Create|Update)")
+# flow-checklist: 廃止済みツール名（本文への再混入を禁止する）。
+# TodoWrite は構造化 Task ツールへ移行済み（Claude Code v2.1.142 以降）、
+# TeamCreate / TeamDelete は 2026-06-17 に廃止済み。
+OBSOLETE_TOOL_RE = re.compile(r"TodoWrite|TeamCreate|TeamDelete")
 
 # flow-checklist: CLAUDE.md でこの見出し以降は歴史的記録として走査対象から除外する。
 HISTORY_HEADING = "## 更新履歴"
 
-# flow-checklist: 全9スキルのステップ0 節に含まれるべき語（宣言方式の構造確認）。
+# flow-checklist: 全9スキルのステップ0 節に含まれるべき語。
+# 「Task」= 主経路（Task ツール方式）、「チェックリスト」= フォールバック、
+# 「省略不可」= 登録／宣言が必須要素であることの明記。3語すべてを要求することで
+# 主経路とフォールバックの双方が記述されていることを機械的に保証する。
 STEP0_HEADING_RE = re.compile(r"^### ステップ0")
-STEP0_REQUIRED_TERMS = ["チェックリスト", "省略不可"]
+STEP0_REQUIRED_TERMS = ["Task", "チェックリスト", "省略不可"]
 
 
 # ---------------------------------------------------------------------------
@@ -590,10 +594,10 @@ def _extract_step0_section(text):
 def check_flow_checklist(repo):
     """[flow-checklist] 廃止済みツール名の再混入検出＋全9スキルのステップ0 構造確認。
 
-    - 検出: 全9 SKILL.md / CLAUDE.md / README.md / 5テンプレートに `TaskCreate` `TaskUpdate` が
-      残存していないか。CLAUDE.md のみ `## 更新履歴` 以降を歴史的記録として除外する。
-    - 構造: 全9 SKILL.md に `### ステップ0` 見出しが存在し、その節に「チェックリスト」「省略不可」が
-      含まれること（宣言方式であることの担保）。
+    - 検出: 全9 SKILL.md / CLAUDE.md / README.md / 5テンプレートに `TodoWrite` / `TeamCreate` /
+      `TeamDelete` が残存していないか。CLAUDE.md のみ `## 更新履歴` 以降を歴史的記録として除外する。
+    - 構造: 全9 SKILL.md に `### ステップ0` 見出しが存在し、その節に「Task」「チェックリスト」
+      「省略不可」が含まれること（Task 方式＋フォールバックの双方が記述されていることの担保）。
     """
     check_id = "flow-checklist"
     problems = []
@@ -617,7 +621,7 @@ def check_flow_checklist(repo):
         for lineno, line in enumerate(lines[:limit], 1):
             if OBSOLETE_TOOL_RE.search(line):
                 problems.append(
-                    f"{loc}:{lineno}: 廃止済みのタスク登録／更新ツール名が再混入しています: "
+                    f"{loc}:{lineno}: 廃止済みツール名が再混入しています: "
                     f"{line.strip()}"
                 )
 
@@ -633,19 +637,19 @@ def check_flow_checklist(repo):
         missing = [t for t in STEP0_REQUIRED_TERMS if t not in section]
         if missing:
             problems.append(
-                f"{loc}: ステップ0 節にチェックリスト宣言方式の記述がありません"
+                f"{loc}: ステップ0 節に進捗管理方式（Task 方式／フォールバック）の記述がありません"
                 f"（不足: {' / '.join(missing)}）"
             )
 
     if problems:
         return CheckResult(
             check_id, False,
-            "フローのチェックリスト宣言方式に不整合があります",
+            "フローの進捗管理方式に不整合があります",
             "\n".join("    " + p for p in problems),
         )
     return CheckResult(
         check_id, True,
-        "廃止済みツール名の再混入なし・全9スキルのステップ0 がチェックリスト宣言方式",
+        "廃止済みツール名の再混入なし・全9スキルのステップ0 が Task 方式（フォールバック付き）",
     )
 
 

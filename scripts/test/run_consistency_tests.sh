@@ -6,7 +6,8 @@
 #   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
 #      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
 #      検査によっては観点ごとに複数の fixture を持つ（例: frontmatter は model 再混入と
-#      argument-hint 例外の差し戻しの2件）。
+#      argument-hint 例外の差し戻しの2件、flow-checklist は廃止ツール名の再混入・ステップ0 節の
+#      欠落・ステップ0 からの Task 記述欠落の3件）。
 #
 # 依存: bash / python3 / 標準コマンドのみ（テストフレームワーク不使用）。
 # CI 組込み可: このスクリプトの終了コードが 0 なら全テスト合格。
@@ -190,10 +191,11 @@ F="$(make_fixture flow-checklist-tool)"
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
+ANCHOR = "> **禁止事項**: (a) Task 登録／チェックリスト宣言の省略、"
+assert ANCHOR in t, "fixture 生成失敗: 禁止事項ブロックが見つかりません"
 t = t.replace(
-    "> **禁止事項**: (a) チェックリスト宣言の省略、",
-    "> 各フェーズは `TaskUpdate` で状態遷移させます。\n>\n"
-    "> **禁止事項**: (a) チェックリスト宣言の省略、",
+    ANCHOR,
+    "> 旧来は `TodoWrite` で進捗を管理していました。\n>\n" + ANCHOR,
     1,
 )
 open(p, "w", encoding="utf-8").write(t)
@@ -241,6 +243,50 @@ t = t.replace(
 open(p, "w", encoding="utf-8").write(t)
 PY
 run_case "frontmatter 異常（task-dev の argument-hint 差し戻し）→ exit 1" "${F}" 1 "[frontmatter]"
+
+# ---------------------------------------------------------------------------
+# (10) flow-checklist: ステップ0 節から Task 方式の記述だけを消す
+#      STEP0_REQUIRED_TERMS への「Task」追加が効いていること自体を検証する。
+#      置換は step0 節のスライス内だけに限定する（全文置換にすると共通ブロックまで壊れ、
+#      common-block も同時に FAIL してテストの意図が曖昧になるため）。
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-step0-task)"
+/usr/bin/python3 - "${F}/skills/task-design/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().splitlines(keepends=True)
+
+start = end = None
+for i, ln in enumerate(lines):
+    if start is None:
+        if ln.startswith("### ステップ0"):
+            start = i
+        continue
+    if ln.startswith("### ") or (ln.startswith("## ") and not ln.startswith("### ")):
+        end = i
+        break
+assert start is not None, "fixture 生成失敗: ステップ0 節が見つかりません"
+if end is None:
+    end = len(lines)
+
+section = "".join(lines[start:end])
+assert "Task" in section, "fixture 生成失敗: ステップ0 節に Task 記述がありません"
+
+for old, new in (
+    ("select:TaskCreate,TaskUpdate,TaskList,TaskGet", "select:SendMessage"),
+    ("TaskCreate", "登録"),
+    ("TaskUpdate", "更新"),
+    ("Task 方式", "宣言方式"),
+    ("Task 一覧", "一覧"),
+    ("Task 登録", "登録"),
+    ("Task", "進捗管理"),
+):
+    section = section.replace(old, new)
+assert "Task" not in section, "fixture 生成失敗: ステップ0 節に Task が残っています"
+
+open(p, "w", encoding="utf-8").write("".join(lines[:start]) + section + "".join(lines[end:]))
+PY
+run_case "flow-checklist 異常（ステップ0 の Task 記述欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # 集計
