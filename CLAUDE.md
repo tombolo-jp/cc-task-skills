@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 8 distinct phases: initialization, requirements, design, planning, implementation, review, fix, and verification.
+This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 8 distinct phases: initialization, requirements, design, planning, implementation, review, fix, and verification (the verification phase covers both procedure generation and automated execution).
 
 ## Skill Architecture
 
-The repository contains 9 interconnected skills that work together (task-init excluded from `--team` option support):
+The repository contains 10 interconnected skills that work together (task-init and task-verify-run are excluded from `--team` option support):
 
 1. **task-design** - Analyzes existing systems and creates technical design. Supports `--team` option.
 2. **task-dev** - Executes implementation based on todo list and creates development report. Supports `--team` option. **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
@@ -18,7 +18,8 @@ The repository contains 9 interconnected skills that work together (task-init ex
 6. **task-req-update** - Reflects user answers to the "要確認事項" (open questions) section back into req.md and consolidates it into a finalized version. Supports `--team` option.
 7. **task-review** - Reviews implementation against requirements, design, and code quality. Supports `--team` option.
 8. **task-todo** - Breaks down design into actionable development tasks with effort estimation. Supports `--team` option.
-9. **task-verify** - Generates a concise manual verification procedure document, consolidating automation-recommended checkpoints into an appendix section at the end. Supports `--team` option.
+9. **task-verify** - Generates a verification procedure document. By default it emits **detailed, automation-ready test cases** (machine-readable preamble block, stable `V-nnn` identifiers, mandatory expected results); `--manual` switches to the concise human-oriented format. Supports `--team` option.
+10. **task-verify-run** - Executes verify.md automatically, records required fixes in `verify-result.md`, and loops fix → re-verify (max 5 rounds). **No `--team` support.**
 
 Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
@@ -53,14 +54,15 @@ Each task follows a standardized directory structure:
 ├── dev-result.md   # Development completion report
 ├── review.md       # Code review report
 ├── fix-result.md   # Fix completion report
-└── verify.md       # Manual verification procedure
+├── verify.md       # Verification procedure
+└── verify-result.md # Verification execution result (created by task-verify-run)
 ```
 
 **Important**: Task files are always created under the **project root's** `.claude/tasks/`, not `~/.claude/tasks/`. Each skill resolves the project root via `pwd` at the beginning of execution and uses absolute paths for all file operations.
 
 ## Model Configuration
 
-**全9スキルは frontmatter に `model` を指定しない。** スキル実行時のモデルは、呼び出し時点の**セッションモデルを継承**する。利用者は `/model` でモデルを切り替えてからスキルを実行することで、Opus / Sonnet / Fable を自由に選択できる。
+**全10スキルは frontmatter に `model` を指定しない。** スキル実行時のモデルは、呼び出し時点の**セッションモデルを継承**する。利用者は `/model` でモデルを切り替えてからスキルを実行することで、Opus / Sonnet / Fable を自由に選択できる。
 
 ```bash
 /model sonnet     # 以降のスキル実行は Sonnet で走る
@@ -112,7 +114,7 @@ Each task follows a standardized directory structure:
 
 ## Key Skill Behaviors
 
-> **フロー強制（全スキル共通）**: 9スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は加えて、実行時に todo.md の各実装タスクを Task として動的登録し、1件ずつ着手・完了を明示する。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。
+> **フロー強制（全スキル共通）**: 10スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は加えて、実行時に todo.md の各実装タスクを Task として動的登録し、1件ずつ着手・完了を明示する。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify-run** は12フェーズを登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
 
 ### /task-init {task_name} [URL]
 - Creates `.claude/tasks/{task_name}/` directory structure
@@ -123,7 +125,7 @@ Each task follows a standardized directory structure:
   - **No fetch method available**: returns an error and exits **without creating init.md or the task directory** (the fetch-method decision happens before `mkdir`)
   - **Partial fetch**: if some content (attachments/comments) cannot be obtained due to the method's limits, processing continues and the missing items are explicitly noted inside init.md
   - **URL quoting**: single quotes are recommended (URLs contain `?`/`&`/`#`); the skill strips surrounding quotes if present
-- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md, verify.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix, task-verify)
+- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md, verify.md, verify-result.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix, task-verify, task-verify-run)
 
 ### /task-req {task_name} [--team]
 - Reads raw customer requests from init.md
@@ -189,21 +191,30 @@ Each task follows a standardized directory structure:
 - Creates fix-result.md with fix details, changed files, and verification results
 - **`--team` option**: Assigns independent fixes to parallel agents by file; sequential fixes handled by team lead to avoid conflicts
 
-### /task-verify {task_name} [--team]
+### /task-verify {task_name} [--manual] [--team]
 - Reads req.md, design.md, and dev-result.md for full context
 - Optionally reads review.md and fix-result.md if they exist
 - Reads verify template from `templates/verify-template.md`
 - Analyzes actual implementation code to generate concrete verification steps
-- Creates verify.md with concise, checkbox-based manual verification procedures written **one item per line** (`- [ ] <操作> → <期待結果>`; the `→` part is omitted when the expected result is obvious from the operation itself)
-- Prioritizes quick-win steps first to lower psychological barriers
-- Includes exact commands, URLs, test data, and expected results
-- **Estimated time (⏱) appears once at the top of the document** as a total; per-section time estimates and per-section explanatory paragraphs are not emitted
-- **Automation-recommended areas** (environment setup, edge cases/errors, non-functional, regression) are kept short in the body; anything needing detail is moved to the trailing **「付録: 自動化推奨の確認観点」** section (no checkboxes, not split into a separate file)
-- **`--team` option**: Deploys a happy-path verification designer, a peripheral-verification/automation-recommendation designer, and a **reduction reviewer** (asymmetric roles — the reviewer's job is to cut duplicated steps, self-evident items, and anything better covered by automated tests); team lead integrates into Quick Win-first ordering
+- **Two output modes.** The `--manual` flag is parsed **before** the `--team` branch and selects `output_mode`; the two flags are independent and all four combinations are valid
+- **Default (`detailed`)**: emits automation-ready test cases for `/task-verify-run` — a machine-readable `## 検証前提` yaml block (base URL, start command, test accounts) as the **first** section, stable identifiers `` `V-nnn` `` on every checkbox item, and multi-line cases (`前提` / `操作` / `入力` / `期待結果` / `自動化メモ`). **Expected results may not be omitted**; ⏱ estimates are not emitted; items that only a human can judge go to `## 人手確認（自動化不可）`
+- **`--manual`**: the concise human-oriented format (2026-07-31 spec) — one item per line (`` - [ ] `V-nnn` <操作> → <期待結果> ``; the `→` part is omitted when the expected result is obvious), quick-win steps first, ⏱ total once at the top. Stable identifiers and the preamble block are still emitted (the concise form can also be fed to `/task-verify-run`)
+- **The 「付録: 自動化推奨の確認観点」 section is abolished in both modes.** In detailed mode those checkpoints become executable steps in the body; in manual mode they are simply left out
+- **`--team` option**: role split depends on `output_mode`. `detailed` deploys a happy-path test-case designer, a peripheral test-case designer, and an **automation-feasibility reviewer** (asymmetric — the reviewer's job is to eliminate items that cannot be executed as written). `--manual` keeps the existing happy-path designer, peripheral designer, and **reduction reviewer** — the reduction reviewer runs **only** with `--manual`
+
+### /task-verify-run {task_name}
+- Reads verify.md and executes its checkbox items automatically; **`--team` is not supported** (a warning is shown and the flag is ignored)
+- Reads report template from `templates/verify-result-template.md`
+- **Tool chain (fixed order, first-available wins)**: `playwright-cli` → Chrome DevTools for agents (CLI layer) → Chrome DevTools MCP → Claude in Chrome. Detection runs once per invocation. If none is available, it prints a verbatim message and **exits without creating verify-result.md or touching the browser** (the intentional near-reverse of `task-init`'s chain: that skill needs an authenticated real session, this one needs deterministic unattended repetition)
+- **Skip decision (5 axes, fail-safe)**: visual/subjective, out-of-system resources, destructive operations not covered by protection, missing execution handles, and undecidable. Skipped items and reasons are written to a `## スキップした項目` section in verify.md
+- **Side-effect protection (FR-9)**: two generic requirements — blocking outbound mail (P-MAIL) and DB backup/restore (P-DB) — implemented as provider chains applied **only when the environment is detected**. Every provider must have a `verify` operation; restore order is fixed **DB → mail**. Restore state is journaled write-ahead in `.verify-run/state.json` so an abnormal exit can be recovered on the next run
+- **Loop control**: counter increments at the start of each verification pass (first pass = 1), max 5; early abort when two consecutive passes produce an identical finding signature, or when a fix round changes no code. Re-verification is scoped to failed items, their dependents, and the impacted range
+- **Safety boundary**: **never commits** (does not even touch the index); aborts when the working tree is dirty at startup unless a journal proves it is a resumed run; does not rewrite req.md / design.md
+- Writes results back to verify.md (`- [ ]` → `- [x]` only when the expected result was met) and appends to verify-result.md; the metadata Agent Teams field is always `無効（指定なし）`
 
 ## Agent Teams オプション
 
-8つのスキル（task-init を除く全スキル）は `--team` オプションに対応しています。
+8つのスキル（task-init と task-verify-run を除く全スキル）は `--team` オプションに対応しています。
 
 ### 使用方法
 
@@ -305,13 +316,13 @@ ToolSearch 結果の判定:
 
 | 検査ID | 内容 |
 |--------|------|
-| `frontmatter` | 全9スキルの `model` 不在 / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（既定は `<task_name> [--team]`。固有の引数を持つスキルのみ `ARGUMENT_HINT_OVERRIDES` で例外化する。現在の例外は **task-init**（URL 用）と **task-dev**（カンマ区切りの複数タスク用）の2件） |
-| `common-block` | 8スキル（task-init 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
+| `frontmatter` | 全10スキルの `model` 不在 / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（既定は `<task_name> [--team]`。固有の引数を持つスキルのみ `ARGUMENT_HINT_OVERRIDES` で例外化する。現在の例外は **task-init**（URL 用）・**task-dev**（カンマ区切りの複数タスク用）・**task-verify**（`--manual` 用）・**task-verify-run**（`--team` 非対応）の4件） |
+| `common-block` | 8スキル（task-init / task-verify-run 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
 | `fallback-msg` | フォールバック文言が CLAUDE.md と SKILL.md で一致するか（整形差を正規化して照合） |
-| `meta-format` | 5テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
+| `meta-format` | 6テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
 | `env-json` | CLAUDE.md / README.md の `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` が一致するか |
-| `template-ref` | 5スキルのテンプレート参照が相対パスで実在し、ハードコード絶対パスの再混入がないか |
-| `flow-checklist` | 廃止済みの旧タスク管理ツール名・旧チーム生成 API 名が SKILL.md・CLAUDE.md（更新履歴節を除く）・README.md・テンプレートへ再混入していないか、および全9スキルに Task 方式＋フォールバックの記述を伴う `### ステップ0` が存在するか |
+| `template-ref` | 6スキルのテンプレート参照が相対パスで実在し、ハードコード絶対パスの再混入がないか |
+| `flow-checklist` | 廃止済みの旧タスク管理ツール名・旧チーム生成 API 名が SKILL.md・CLAUDE.md（更新履歴節を除く）・README.md・テンプレートへ再混入していないか、および全10スキルに Task 方式＋フォールバックの記述を伴う `### ステップ0` が存在するか |
 
 実行方法:
 
@@ -395,7 +406,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-08-06 22:30:00
+最終更新: 2026-08-10 21:23:09
+更新内容: 検証フェーズを「手順書を生成するだけ」から「**生成した手順に沿って Claude Code 自身が実行し、修正し、再確認する**」ところまで拡張（タスク名 `verify`、設計書 `.claude/tasks/verify/design.md`）。**(1) 新スキル `task-verify-run` を新設**（スキル数 9→**10**）: verify.md のチェックボックス項目を自動実行し、要修正事項を `verify-result.md` へ追記記録し、修正と再確認のループを**上限5回**まで回す。本スキル群で**初めて閉ループ（確認 → 修正 → 再確認）を導入**し、**リポジトリの実体と実行環境（DB・メール設定）を書き換える初のスキル**となる。`--team` は非対応（確認手順と期待結果が既に定まっており合議の価値が乏しく、修正がリポジトリを書き換えるため並列実行が競合する）。指定時はエラーにせず警告のうえ無視する。**(2) 自動化手段の先着採用チェーン**: `playwright-cli` → Chrome DevTools for agents（CLI 層）→ Chrome DevTools MCP（MCP 層）→ Claude in Chrome。判定はスキル実行あたり1回。手段ゼロなら**ブラウザ操作0件・保護措置適用前**に逐語文言を表示して中断する（`task-init` の「取得手段ゼロ＝何も作らない」と同型）。`task-init` のチェーンとほぼ逆順になる理由（あちらは認証済みページ閲覧が要件で実セッションが有利、こちらは無人反復が要件で決定的な CLI が有利）を SKILL.md 本文に明記した。**(3) 副作用の抑止と原状復帰**: 汎用要件を **P-MAIL（外部メール送信の遮断）** と **P-DB（DB のバックアップ・復元）** の2つに絞り、環境依存の実現手段は「プロバイダ」として分離して**検出できた場合のみ適用**する（P-MAIL 4種／P-DB 5種の先着採用）。各プロバイダは `detect` / `apply` / `verify` / `restore` の4操作を必ず持ち、**`verify` を持たないプロバイダは採用しない**（「バックアップしたつもり」で破壊的操作を許可するのが最悪の事故のため）。復帰情報は `apply` より**前**に `state: "planned"` で `.verify-run/state.json` へ書く（write-ahead）ため、途中で落ちても次回起動時の復旧が冪等な no-op になる。復帰順序は **DB → メール固定**（DB 復元が `active_plugins` 等を巻き戻すため）。SMTP 系プラグインの判定は既知リスト＋正規表現の2段構えとし、部分一致 `smtp|mail` を禁止した（`mailchimp` / `mailpoet` の巻き込み防止）。**(4) スキップ判定は5軸のフェイルセーフ**: 目視・主観／系外リソース／保護措置外の破壊的操作／手掛かり不在／判定不能。評価順を「軸2 → 軸4 → 軸3 → 軸1 → 軸5」としたのは副作用の可能性が高い軸から先に落とすため。軸1 は決定的なアサーションへ翻訳できれば救済するが、**スクリーンショットをモデルが見て「崩れていない」と判断することは決定的なアサーションとして認めない**（再現性がなく承認バイアスで無条件合格を出す危険があるため）。**(5) 終了保証**: ループ上限5＋停滞の機械判定（`<item_id>|<failure_class>|<evidence_hash>` の署名が2ループ連続で一致したら早期中断／前回の指摘が全て残り新規が増える状態が2回連続なら退行とみなし中断）＋修正でコード変更が0件なら即中断。加えて**1項目あたりの操作予算**（ブラウザ15回／コマンド3回）を置いた。req.md の「タイムアウトを設けない」は**時間軸**の規定であり操作回数は別軸であること、上限がないと要素が見つからない1項目で数万トークンを消費する経路が実在することを根拠に、要件の趣旨と衝突しうる点も含めて明示的に採用を判断した。**(6) 安全境界**: **コミットしない**（`git add` すら行わずインデックスにも触れない。`task-dev` 複数タスクモードとの差分）。実行開始時に作業ツリーが dirty なら中断するが、`state.json` が中断からの再開を示す場合のみ自身の変更による dirty を許容する。`.git/**`・他タスクディレクトリ・`<PROJECT_ROOT>` 外・`node_modules`／`vendor`・秘密情報への書き込みを禁止列挙した。ブラウザ操作は許可ホスト（ループバック／ローカル TLD／プライベート IP）に限定し、外部 IdP ログイン・2FA・決済確定・実メール受信箱アクセスは**承認の有無にかかわらず禁止**とした。**(7) `task-verify` の生成方針を転換**（意図的な非互換）: 既定の出力を「自動実行を前提とした詳細なテストケース」へ変更し、現行の簡潔版は **`--manual`** で選択する形に降格した（`argument-hint` は `"<task_name> [--manual] [--team]"`）。詳細版は機械可読な `## 検証前提`（yaml）を先頭に持ち、全項目へ安定識別子 `` `V-nnn` `` を採番し、**期待結果の省略を禁止**する。「付録: 自動化推奨の確認観点」は**両モードとも廃止**（同じ観点が2形態で二重管理になるため。詳細版では実行可能な手順として本文へ統合し、簡潔版では書かない）。`--team` の3担当は出力モードで非対称に切り替え、**削減レビュアは `--manual` 時のみ起動**、詳細版では「自動実行可能性レビュア」を立てる（詳細版で問題になるのは分量ではなく実行不能な項目が混ざることのため）。あわせて「チームメイトへの依頼時の禁止事項」も2系列化し、詳細版では**簡潔さバイアスを注入する指示を禁止**した。**(8) 実装の裏取り（着手前スパイク3件）**: ①本環境で利用可能な自動化手段は **優先度1（playwright-cli v0.1.9）と優先度4（Claude in Chrome）のみ**。優先度2は chrome-devtools 系スキル・CLI コマンドとも不在、優先度3は `ToolSearch` に `mcp__chrome-devtools__*` が現れず、**いずれも実コマンド名・ツール名を特定できなかった**ため、優先度2は「スキルの SKILL.md を Read してコマンド名を特定する」という抽象記述のまま残した（プラグインの新規導入は環境変更を伴うため行っていない）。②ステップ0 定型文の sha256 は設計時の実測値（前半 `9b1d543131c7` / 後半 `fc0566f8773b`）と**7スキルすべてで一致**したため、`task-init` と同じく `--team` 段落を落とした形でバイトコピーした（改変は「Agent Teams とは無関係です」の1行のみ）。③`playwright-cli` の `cookie-clear` は `page.context().clearCookies()`（**コンテキスト全体**）、`localstorage-clear` / `sessionstorage-clear` は `page.evaluate(() => …clear())`（**現在ページのオリジン限定**）であることを実測し、ループ間リセットの表に「対象オリジンのページを開いた状態で実行する」旨を追記した。**(9) 整合性チェック追従**: 7検査の構成・`CHECKS`・`OBSOLETE_TOOL_RE`・`STEP0_REQUIRED_TERMS` はいずれも不変。`ALL_SKILLS` 9→**10**、`TEMPLATE_FILES` 5→**6**、`ARGUMENT_HINT_OVERRIDES` 2→**4**件（`task-verify` / `task-verify-run` を追加）と、自己申告文言（「全9スキル」→「全10スキル」等）を更新した。回帰テストはケース(12)〜(15) を追加し 11→**15ケース**（task-verify-run と task-verify の `argument-hint` 差し戻し2件＝`ARGUMENT_HINT_OVERRIDES` の新規例外が効いていることの検証／新テンプレートの3値表記崩し＝`TEMPLATE_FILES` の 5→6 が効いていることの検証／task-verify-run のステップ0 節欠落＝`ALL_SKILLS` の 9→10 が効いていることの検証）。**(10) 未変更**: Agent Teams 共通ブロック（`task-verify` の L42–L97 は**1バイトも変更せず** `common-block` sha256 不変）、成立2条件、フォールバック文言②、`env-json`、メタ情報3行/3値表記、他8スキルの SKILL.md、他4テンプレート。**(11) 検証**: `python3 scripts/check_consistency.py -v` で全7検査 PASS（exit 0）、`bash scripts/test/run_consistency_tests.sh` で **15/15 PASS**（exit 0）。**(12) 未実施**: design.md §10-1 の A-8「実地スモーク」（詳細版 verify.md の生成 → `/task-verify-run` の1周実行）は、対象アプリケーションを持たない本リポジトリでは実施できないため見送った（詳細は `.claude/tasks/verify/dev-result.md`）。
+
+前回更新: 2026-08-06 22:30:00
 更新内容: 進捗管理機構を**構造化チェックリスト宣言方式から Task ツール方式へ回帰**（タスク名 `task_tools`、設計書 `.claude/tasks/task_tools/design.md`）。**(1) 背景と経緯の訂正**: 2026-07-22 の改訂で「Claude Code 側の仕様変更により組み込みのタスク登録／更新ツールが提供されなくなり、主経路が恒久的に閉塞した」と記録してチェックリスト方式へ全面移行したが、**これは事実誤認だった**。当時観測された取得不可は v2.1.217 / v2.1.218 における一時的な不具合を踏んだ可能性が高く、v2.1.223 では `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` の4ツールがいずれも `ToolSearch` で取得可能であることを実測（着手前スパイクで確認）。よって Task 方式を主経路へ戻し、チェックリスト方式をフォールバックへ再配置した。**(2) 2層構成**: 進捗管理を「方式決定レイヤ」と「フェーズ実行レイヤ」に分離。方式決定は**スキル実行あたり1回・ステップ0 冒頭のみ**で行い（フェーズごとの再判定を禁止）、以降は決定済みの方式に従うだけとする。取得できなければ**無告知で**チェックリスト方式へフォールバックする（旧実装で「Task ツールが使えないため…」という異常系文言が正常動作中に毎回表示されていた問題の再発防止）。**(3) 全9スキル改訂**: ステップ0 を「全フェーズを Task として登録する」形式へ書換（ToolSearch のロード手順・判定表・Task 方式／チェックリスト方式それぞれの説明・省略不可の明記・禁止事項の3項目）。標準形7スキル（task-req / task-req-update / task-design / task-todo / task-review / task-fix / task-verify）は**フェーズ列挙のみをスキル固有として残し、定型文部分を sha256 でバイト一致**させた（23〜25行 → 44〜46行）。task-dev はステップ0 の単一／複数2系列を維持しつつ「該当する側のみを登録」へ、todo 動的追加を `TaskCreate`（`subject` = `[todo <i>/<N>] <タスク名>`、複数タスクモードは `[task <i>/<N>] <TASK> を実装する`）へ、サブエージェント委譲プロンプトの禁止事項へ「Task ツールを使用しないこと」を追加（タスクリストはセッション単位で共有されるため、メイン会話の進捗表示を汚染する）。task-init は `--team` 非対応のため `--team` 段落を除いた版とし、URL 未指定4フェーズ／指定7フェーズの2系列を維持、取得手段ゼロ時の中断をフェーズ2 `in_progress` のまま・後続 `pending` のまま（`deleted` は「不要になった」を意味し失敗を表さないため不使用）へ改訂。**(4) Agent Teams 共通ブロック**: 3行のみ改訂（進捗追跡の主体をステップ0 で確定した方式へ、旧チーム生成／破棄 API の注記をツール名から役割語へ言い換え）。task-dev を正準として7スキルへバイトコピー（`common-block` PASS）。成立2条件・spawn 失敗時フォールバック文言②・`select:SendMessage`・メタ情報3行/3値表記・env-json 記述は**一切変更なし**。**(5) 廃止語の自己衝突の解消**: `TeamCreate` / `TeamDelete` は「廃止済み」でありながら共通ブロック内に実文字列として存在していたため（8スキル全て）、禁止語へ追加すると**注記行自身が検査に引っかかる**。当該注記からツール名を除去し役割語（「旧来のチーム生成／破棄 API」）へ言い換えることで解決した（検査の除外規則を増やさない）。**(6) 設計原則の改訂**: CLAUDE.md の設計原則節を「フローは構造化チェックリストで明示的に追跡する」→「**フローは Task ツールで明示的に追跡する**」へ全面改稿し、ハーネス UI 連動による記述・出力の簡潔化とフォールバックによる可用性耐性を明記。2026-07-22 に新設した「進捗追跡の記述にツール固有名を持ち込まない」方針は、主経路をツールに置く以上ツール名の明示が避けられないため**撤回**し失効注記で保存。旧経緯の「恒久的に閉塞した」記述も事実誤認として訂正した。**(7) 整合性チェック追従**: `flow-checklist` の禁止語を `Task(?:Create|Update)` → `TodoWrite|TeamCreate|TeamDelete` へ反転、必須語を `["チェックリスト", "省略不可"]` → `["Task", "チェックリスト", "省略不可"]` へ拡張（主経路とフォールバックの双方が記述されていることを機械的に保証）。検査ID・`CHECKS` の7件構成・走査対象・`HISTORY_HEADING` 除外・`_extract_step0_section` は不変。回帰テストはケース(7) の注入文字列を `TaskUpdate` → `TodoWrite` へ差し替え、ケース(10)「ステップ0 の Task 記述欠落」を新規追加し 10→**11ケース**（新ケースは step0 節を**スライスした範囲内でのみ**置換し、`Task` の消し残しを assert する。全文置換にすると `common-block` も同時に落ちてテストの意図が曖昧になるため）。**(8) スパイクによる裏取り**: 新 step0 はコードフェンスと表を含むため、`_extract_step0_section`（「次の `###` / `##` 見出しまで」で節を切る）が抽出範囲を誤らないかを **task-design 1スキルのみ**で先に検証し、7スキル分をまとめて壊すリスクを排除した（結果は成功）。**(9) 後方互換**: frontmatter・引数仕様・入力/出力ファイル・生成物のフォーマット・メタ情報3行/3値表記はいずれも不変。**(10) 検証**: `python3 scripts/check_consistency.py -v` で全7検査 PASS（exit 0）、`bash scripts/test/run_consistency_tests.sh` で 11/11 PASS（exit 0）、標準形7スキルの step0 定型文が sha256 一致することを確認。
 
 前回更新: 2026-07-31 00:00:00

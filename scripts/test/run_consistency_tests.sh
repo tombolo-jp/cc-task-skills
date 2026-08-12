@@ -6,8 +6,9 @@
 #   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
 #      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
 #      検査によっては観点ごとに複数の fixture を持つ（例: frontmatter は model 再混入と
-#      argument-hint 例外の差し戻しの2件、flow-checklist は廃止ツール名の再混入・ステップ0 節の
-#      欠落・ステップ0 からの Task 記述欠落の3件）。
+#      argument-hint 例外の差し戻し3件（task-dev / task-verify-run / task-verify）の計4件、
+#      flow-checklist は廃止ツール名の再混入・ステップ0 節の欠落2件・ステップ0 からの
+#      Task 記述欠落の4件、meta-format は3値表記崩し2件）。
 #
 # 依存: bash / python3 / 標準コマンドのみ（テストフレームワーク不使用）。
 # CI 組込み可: このスクリプトの終了コードが 0 なら全テスト合格。
@@ -287,6 +288,85 @@ assert "Task" not in section, "fixture 生成失敗: ステップ0 節に Task �
 open(p, "w", encoding="utf-8").write("".join(lines[:start]) + section + "".join(lines[end:]))
 PY
 run_case "flow-checklist 異常（ステップ0 の Task 記述欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
+
+# ---------------------------------------------------------------------------
+# (11) frontmatter: task-verify-run の argument-hint を既定値へ差し戻す
+#      ARGUMENT_HINT_OVERRIDES へ追加した --team 非対応スキルの例外が効いていることを検証する。
+# ---------------------------------------------------------------------------
+F="$(make_fixture frontmatter-argument-hint-verify-run)"
+/usr/bin/python3 - "${F}/skills/task-verify-run/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace(
+    'argument-hint: "<task_name>"',
+    'argument-hint: "<task_name> [--team]"',
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "frontmatter 異常（task-verify-run の argument-hint 差し戻し）→ exit 1" "${F}" 1 "[frontmatter]"
+
+# ---------------------------------------------------------------------------
+# (12) frontmatter: task-verify の argument-hint を旧値（既定値）へ差し戻す
+#      --manual を落として既定値と一致してしまう実装ミスは、この fixture でのみ検出できる。
+# ---------------------------------------------------------------------------
+F="$(make_fixture frontmatter-argument-hint-verify)"
+/usr/bin/python3 - "${F}/skills/task-verify/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace(
+    'argument-hint: "<task_name> [--manual] [--team]"',
+    'argument-hint: "<task_name> [--team]"',
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "frontmatter 異常（task-verify の argument-hint 差し戻し）→ exit 1" "${F}" 1 "[frontmatter]"
+
+# ---------------------------------------------------------------------------
+# (13) meta-format: 新テンプレート（verify-result-template.md）の3値表記を崩す
+#      TEMPLATE_FILES の 5→6 が効いていること自体を検証する。
+# ---------------------------------------------------------------------------
+F="$(make_fixture meta-format-verify-result)"
+/usr/bin/python3 - "${F}/skills/task-verify-run/templates/verify-result-template.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace(
+    "- Agent Teams: [有効 / 無効（指定なし） / 無効（フォールバック）]",
+    "- Agent Teams: [有効 / 無効]",
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "meta-format 異常（新テンプレートの3値表記崩し）→ exit 1" "${F}" 1 "[meta-format]"
+
+# ---------------------------------------------------------------------------
+# (14) flow-checklist: task-verify-run のステップ0 節を欠落させる
+#      ALL_SKILLS の 9→10 が効いていること自体を検証する。ケース(8) と同じ手法で
+#      step0 節をスライス削除する（他検査を巻き込まないため範囲を限定する）。
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-step0-verify-run)"
+/usr/bin/python3 - "${F}/skills/task-verify-run/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().splitlines(keepends=True)
+start = None
+out = []
+for i, ln in enumerate(lines):
+    if start is None and ln.startswith("### ステップ0"):
+        start = i
+        continue
+    if start is not None and ln.startswith("### "):
+        start = None
+    if start is None:
+        out.append(ln)
+assert len(out) < len(lines), "fixture 生成失敗: ステップ0 節が見つかりません"
+open(p, "w", encoding="utf-8").write("".join(out))
+PY
+run_case "flow-checklist 異常（task-verify-run のステップ0 節欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # 集計
