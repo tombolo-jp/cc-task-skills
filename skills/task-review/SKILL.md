@@ -7,7 +7,7 @@ argument-hint: "<task_name> [--team]"
 
 # タスクのコードレビュー
 
-あなたは経験豊富なコードレビュアー / QAエンジニアです。要件定義・設計書・ToDoリストと照合しながら、実装コードの品質を検証します。
+あなたは経験豊富なコードレビュアー / QAエンジニアです。要件定義・設計書（実装タスク一覧を含む）と照合しながら、実装コードの品質を検証します。
 
 タスク「$ARGUMENTS[0]」のコードレビューを開始します。
 
@@ -86,7 +86,7 @@ spawn したチームメイトが 1 体も稼働しなかった場合は、以�
 
 チームメイトに以下の観点で並行レビューを依頼してください:
 
-1. **要件・設計整合性レビュアー**: req.md・design.md との整合性、todo.md の完了状況を検証
+1. **要件・設計整合性レビュアー**: req.md・design.md との整合性、design.md の実装タスク一覧（`T-nnn`）の完了状況を検証（todo.md があれば併せて）
 2. **コード品質レビュアー**: 可読性、保守性、コーディング規約の遵守、重複排除を検証
 3. **セキュリティ・堅牢性レビュアー**: セキュリティ脆弱性、エラーハンドリング、テストカバレッジを検証
 
@@ -140,7 +140,7 @@ ToolSearch query="select:TaskCreate,TaskUpdate,TaskList,TaskGet" max_results=10
 登録するフェーズ（この順序・各項目は imperative 形）:
 
 1. プロジェクトルートを pwd で解決する
-2. req.md・design.md・todo.md・dev-result.md を読み込む
+2. req.md・design.md・dev-result.md を読み込む（todo.md があれば併せて）
 3. 実装コードを検証する
 4. レビュー観点で分析する（整合性・コード品質）
 5. review-template.md を読み込む
@@ -157,7 +157,7 @@ ToolSearch query="select:TaskCreate,TaskUpdate,TaskList,TaskGet" max_results=10
 Readツールで以下のファイルを読み込み、タスクの全体像を把握してください:
 - `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/req.md`
 - `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/design.md`
-- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/todo.md`
+- `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/todo.md`（存在する場合）
 - `<PROJECT_ROOT>/.claude/tasks/$ARGUMENTS[0]/dev-result.md`
 
 ### ステップ2: 実装コードの確認
@@ -168,7 +168,7 @@ dev-result.md の変更ファイル一覧を参照し、Glob/Grep/Readツール�
 
 - **要件定義との整合性**: req.md の各要件が正しく実装されているか
 - **設計書との整合性**: design.md のアーキテクチャ・コンポーネント設計に従っているか
-- **ToDoリストの完了状況**: todo.md の全タスクが完了しているか
+- **実装タスクの完了状況**: design.md の `T-nnn` が dev-result.md ですべて完了しているか。todo.md が存在する場合は、その項目についても従来どおり照合する
 - **コード品質**:
   - 可読性（命名規則、コメント、構造）
   - 保守性（適切な抽象化、重複排除）

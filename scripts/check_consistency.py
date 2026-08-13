@@ -26,13 +26,12 @@ from pathlib import Path
 # 定数定義
 # ---------------------------------------------------------------------------
 
-# Agent Teams 対応スキル（task-init / task-verify-run を除く8スキル）。common-block 検査対象。
+# Agent Teams 対応スキル（task-init / task-verify-run を除く7スキル）。common-block 検査対象。
 TEAM_SKILLS = [
     "task-dev",
     "task-req",
     "task-req-update",
     "task-design",
-    "task-todo",
     "task-review",
     "task-fix",
     "task-verify",
@@ -41,7 +40,7 @@ TEAM_SKILLS = [
 # common-block 検査の正準（基準）スキル（design D-7）。
 CANONICAL_SKILL = "task-dev"
 
-# 全10スキル（frontmatter 検査対象）。
+# 全9スキル（frontmatter 検査対象）。
 ALL_SKILLS = ["task-init", "task-verify-run"] + TEAM_SKILLS
 
 # テンプレートを持つスキルと、そのテンプレートファイル名（meta-format / template-ref 検査対象）。
@@ -49,7 +48,7 @@ TEMPLATE_FILES = {
     "task-dev": "dev-result-template.md",
     "task-fix": "fix-result-template.md",
     "task-review": "review-template.md",
-    "task-todo": "todo-template.md",
+    "task-design": "design-template.md",
     "task-verify": "verify-template.md",
     "task-verify-run": "verify-result-template.md",
 }
@@ -80,7 +79,7 @@ OBSOLETE_TOOL_RE = re.compile(r"TodoWrite|TeamCreate|TeamDelete")
 # flow-checklist: CLAUDE.md でこの見出し以降は歴史的記録として走査対象から除外する。
 HISTORY_HEADING = "## 更新履歴"
 
-# flow-checklist: 全10スキルのステップ0 節に含まれるべき語。
+# flow-checklist: 全9スキルのステップ0 節に含まれるべき語。
 # 「Task」= 主経路（Task ツール方式）、「チェックリスト」= フォールバック、
 # 「省略不可」= 登録／宣言が必須要素であることの明記。3語すべてを要求することで
 # 主経路とフォールバックの双方が記述されていることを機械的に保証する。
@@ -290,7 +289,7 @@ def make_diff(expected, actual, expected_label, actual_label):
 # ---------------------------------------------------------------------------
 
 def check_frontmatter(repo):
-    """[frontmatter] 全10スキルの model 不在 / disable-model-invocation / name / argument-hint 規約準拠。"""
+    """[frontmatter] 全9スキルの model 不在 / disable-model-invocation / name / argument-hint 規約準拠。"""
     check_id = "frontmatter"
     problems = []
     for skill in ALL_SKILLS:
@@ -336,7 +335,7 @@ def check_frontmatter(repo):
             "frontmatter 規約に不一致があります",
             "\n".join("    " + p for p in problems),
         )
-    return CheckResult(check_id, True, "全10スキルの model 不在/disable-model-invocation/name/argument-hint 規約準拠")
+    return CheckResult(check_id, True, "全9スキルの model 不在/disable-model-invocation/name/argument-hint 規約準拠")
 
 
 def check_common_block(repo):
@@ -386,7 +385,7 @@ def check_common_block(repo):
         )
     return CheckResult(
         check_id, True,
-        f"8スキルの Agent Teams 共通ブロックが {CANONICAL_SKILL} 基準と一致（sha256: {canonical_hash[:12]}…）",
+        f"7スキルの Agent Teams 共通ブロックが {CANONICAL_SKILL} 基準と一致（sha256: {canonical_hash[:12]}…）",
     )
 
 
@@ -446,7 +445,7 @@ def check_fallback_msg(repo):
         )
     return CheckResult(
         check_id, True,
-        "フォールバック文言②が CLAUDE.md と8スキル SKILL.md で一致（整形差正規化後）",
+        "フォールバック文言②が CLAUDE.md と7スキル SKILL.md で一致（整形差正規化後）",
     )
 
 
@@ -595,11 +594,11 @@ def _extract_step0_section(text):
 
 
 def check_flow_checklist(repo):
-    """[flow-checklist] 廃止済みツール名の再混入検出＋全10スキルのステップ0 構造確認。
+    """[flow-checklist] 廃止済みツール名の再混入検出＋全9スキルのステップ0 構造確認。
 
-    - 検出: 全10 SKILL.md / CLAUDE.md / README.md / 6テンプレートに `TodoWrite` / `TeamCreate` /
+    - 検出: 全9 SKILL.md / CLAUDE.md / README.md / 6テンプレートに `TodoWrite` / `TeamCreate` /
       `TeamDelete` が残存していないか。CLAUDE.md のみ `## 更新履歴` 以降を歴史的記録として除外する。
-    - 構造: 全10 SKILL.md に `### ステップ0` 見出しが存在し、その節に「Task」「チェックリスト」
+    - 構造: 全9 SKILL.md に `### ステップ0` 見出しが存在し、その節に「Task」「チェックリスト」
       「省略不可」が含まれること（Task 方式＋フォールバックの双方が記述されていることの担保）。
     """
     check_id = "flow-checklist"
@@ -652,7 +651,7 @@ def check_flow_checklist(repo):
         )
     return CheckResult(
         check_id, True,
-        "廃止済みツール名の再混入なし・全10スキルのステップ0 が Task 方式（フォールバック付き）",
+        "廃止済みツール名の再混入なし・全9スキルのステップ0 が Task 方式（フォールバック付き）",
     )
 
 

@@ -4,22 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 8 distinct phases: initialization, requirements, design, planning, implementation, review, fix, and verification (the verification phase covers both procedure generation and automated execution).
+This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 7 distinct phases: initialization, requirements, design (which now covers task breakdown and effort estimation as well), implementation, review, fix, and verification (the verification phase covers both procedure generation and automated execution).
 
 ## Skill Architecture
 
-The repository contains 10 interconnected skills that work together (task-init and task-verify-run are excluded from `--team` option support):
+The repository contains 9 interconnected skills that work together (task-init and task-verify-run are excluded from `--team` option support):
 
-1. **task-design** - Analyzes existing systems and creates technical design. Supports `--team` option.
-2. **task-dev** - Executes implementation based on todo list and creates development report. Supports `--team` option. **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
+1. **task-design** - Analyzes existing systems and creates technical design, **then breaks it down into an implementation task list (`T-nnn`) with effort estimation in the same run**. Supports `--team` option.
+2. **task-dev** - Executes implementation based on the design's implementation task list and creates development report. Supports `--team` option. **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
 3. **task-fix** - Fixes code based on review feedback. Supports `--team` option.
 4. **task-init** - Creates task environment and requirements gathering. Optionally fetches task content from a URL into init.md. (No `--team` support)
 5. **task-req** - Creates requirements draft from raw customer requests. Supports `--team` option.
 6. **task-req-update** - Reflects user answers to the "要確認事項" (open questions) section back into req.md and consolidates it into a finalized version. Supports `--team` option.
 7. **task-review** - Reviews implementation against requirements, design, and code quality. Supports `--team` option.
-8. **task-todo** - Breaks down design into actionable development tasks with effort estimation. Supports `--team` option.
-9. **task-verify** - Generates a verification procedure document. By default it emits **detailed, automation-ready test cases** (machine-readable preamble block, stable `V-nnn` identifiers, mandatory expected results); `--manual` switches to the concise human-oriented format. Supports `--team` option.
-10. **task-verify-run** - Executes verify.md automatically, records required fixes in `verify-result.md`, and loops fix → re-verify (max 5 rounds). **No `--team` support.**
+8. **task-verify** - Generates a verification procedure document. By default it emits **detailed, automation-ready test cases** (machine-readable preamble block, stable `V-nnn` identifiers, mandatory expected results); `--manual` switches to the concise human-oriented format. Supports `--team` option.
+9. **task-verify-run** - Executes verify.md automatically, records required fixes in `verify-result.md`, and loops fix → re-verify (max 5 rounds). **No `--team` support.**
 
 Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
@@ -49,8 +48,7 @@ Each task follows a standardized directory structure:
 .claude/tasks/{task_name}/
 ├── init.md         # Raw customer requests
 ├── req.md          # Requirements definition
-├── design.md       # Technical design
-├── todo.md         # Implementation todo list with effort estimation
+├── design.md       # Technical design + §12 implementation task list + §13 effort estimate
 ├── dev-result.md   # Development completion report
 ├── review.md       # Code review report
 ├── fix-result.md   # Fix completion report
@@ -60,9 +58,11 @@ Each task follows a standardized directory structure:
 
 **Important**: Task files are always created under the **project root's** `.claude/tasks/`, not `~/.claude/tasks/`. Each skill resolves the project root via `pwd` at the beginning of execution and uses absolute paths for all file operations.
 
+> **Backward compatibility**: tasks created with older versions of these skills also contain a `todo.md`. `task-dev` and `task-review` still read it whenever it exists; design.md takes precedence when the two disagree.
+
 ## Model Configuration
 
-**全10スキルは frontmatter に `model` を指定しない。** スキル実行時のモデルは、呼び出し時点の**セッションモデルを継承**する。利用者は `/model` でモデルを切り替えてからスキルを実行することで、Opus / Sonnet / Fable を自由に選択できる。
+**全9スキルは frontmatter に `model` を指定しない。** スキル実行時のモデルは、呼び出し時点の**セッションモデルを継承**する。利用者は `/model` でモデルを切り替えてからスキルを実行することで、Opus / Sonnet / Fable を自由に選択できる。
 
 ```bash
 /model sonnet     # 以降のスキル実行は Sonnet で走る
@@ -114,7 +114,7 @@ Each task follows a standardized directory structure:
 
 ## Key Skill Behaviors
 
-> **フロー強制（全スキル共通）**: 10スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は加えて、実行時に todo.md の各実装タスクを Task として動的登録し、1件ずつ着手・完了を明示する。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify-run** は12フェーズを登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
+> **フロー強制（全スキル共通）**: 9スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は加えて、実行時に design.md の実装タスク一覧（`T-nnn`。todo.md が存在する場合はその項目も）を Task として動的登録し、1件ずつ着手・完了を明示する。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify-run** は12フェーズを登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
 
 ### /task-init {task_name} [URL]
 - Creates `.claude/tasks/{task_name}/` directory structure
@@ -125,7 +125,7 @@ Each task follows a standardized directory structure:
   - **No fetch method available**: returns an error and exits **without creating init.md or the task directory** (the fetch-method decision happens before `mkdir`)
   - **Partial fetch**: if some content (attachments/comments) cannot be obtained due to the method's limits, processing continues and the missing items are explicitly noted inside init.md
   - **URL quoting**: single quotes are recommended (URLs contain `?`/`&`/`#`); the skill strips surrounding quotes if present
-- Note: design.md, todo.md, dev-result.md, review.md, fix-result.md, verify.md, verify-result.md are created by their respective skills (task-design, task-todo, task-dev, task-review, task-fix, task-verify, task-verify-run)
+- Note: design.md, dev-result.md, review.md, fix-result.md, verify.md, verify-result.md are created by their respective skills (task-design, task-dev, task-review, task-fix, task-verify, task-verify-run)
 
 ### /task-req {task_name} [--team]
 - Reads raw customer requests from init.md
@@ -146,40 +146,39 @@ Each task follows a standardized directory structure:
 ### /task-design {task_name} [--team]
 - Reads req.md to understand task scope
 - Analyzes existing project structure to maintain consistency
+- Reads the design template from `templates/design-template.md`
 - Creates comprehensive design.md covering architecture, components, file structure, data design, API design, error handling, testing strategy, and performance/security considerations
-- **`--team` option**: Deploys data design, API/interface design, and security/performance agents in parallel; team lead integrates results into design.md
-
-### /task-todo {task_name} [--team]
-- Reads req.md and design.md to understand technical requirements
-- Reads effort estimation template from `templates/todo-template.md`
-- Creates structured todo.md with implementation order, task breakdown, deliverables, priorities, and checkpoints
-- Performs effort estimation for manual implementation by a developer already familiar with the codebase (design reading, stakeholder coordination, and calendar lead time are excluded from effort)
-- **Three-layer estimate**: §0 pre-implementation spikes (blockers resolved in 0.5–1h each) / §A implementation effort (writing code + verification) / §B ancillary work (environment setup, release, documentation)
-- **Mandatory sanity check (step 3)**: computes lines-of-code ÷ implementation hours; an estimate below 30 lines/h is rejected as inflated and sent back to step 2
+- **Also produces the implementation task list and the effort estimate in the same run.** The generated design.md is split by a **設計確定線 (design freeze line)**: §1–§11 are design sections, §12 is `## 12. 実装タスク一覧`, §13 is `## 13. 工数見積もり`, and `## メタ情報` is always last
+- **`## 12. 実装タスク一覧`** is the single section downstream skills parse. Every item carries a stable `` `T-nnn` `` identifier (3-digit zero-padded, numbering order = implementation order, gaps allowed, duplicates prohibited, IDs never reused) plus 対象 / 作業 / 依存 / 完了条件 / 見積もり (注意点 optional). **task-dev never rewrites these checkboxes** — progress lives in dev-result.md
+- **`## 4. ファイル構造` must record estimated line counts** per file; their total is the input to the sanity check
+- Performs effort estimation for manual implementation by a developer already familiar with the codebase (design reading, stakeholder coordination, and calendar lead time are excluded from effort; review handling is capped at 15% of implementation effort)
+- **Three-layer estimate**: §0 pre-implementation spikes (blockers resolved in 0.5–1h each) / §A implementation effort (writing code + verification) / §B ancillary work (environment setup, release, documentation). **§13-5 (§A) holds the roll-up only** — the task detail lives solely in §12, so nothing is written twice
+- **Mandatory sanity check (step 5-3)**: computes lines-of-code ÷ implementation hours; an estimate below 30 lines/h is rejected as inflated and sent back to step 5-1. **Rework is capped at 2 rounds**, with early abort when the §A total is unchanged; on reaching the cap the estimate is adopted as-is and flagged in §13-3 for the user to judge
 - Converts open-ended uncertainty into spikes rather than unbounded buffers; buffer is ±30% on §A, while §B is presented as a raw lower–upper range with no coefficient
-- Keeps task count to 8–12 by merging work on the same file or class; avoids anchoring on any pre-existing estimate found in design.md
-- **`--team` option**: Deploys a decomposition/roll-up agent and a **reduction reviewer** (asymmetric roles — the reviewer's job is to cut effort and to reject estimates failing the sanity check); team lead integrates results into todo.md
+- Keeps task count to 8–12 by merging work on the same file or class; **anchoring avoidance** is enforced structurally by the freeze line — design sections are read-only during estimation, and any pre-existing estimate is compared only after building one's own roll-up
+- **`--team` option**: runs in **two sequential phases** — phase 1 deploys data design, API/interface design, and security/performance agents in parallel to fix §1–§11; phase 2 then deploys a decomposition/roll-up agent and a **reduction reviewer** (asymmetric roles — the reviewer's job is to cut effort and to reject estimates failing the sanity check). Team lead integrates results into design.md; rejected reduction findings must be justified in §13-9
 
 ### /task-dev {task_name}[,{task_name}...] [--team]
-- Reads design.md and todo.md to understand implementation requirements
+- Reads design.md to understand implementation requirements (**todo.md is read only when it exists**, for backward compatibility with tasks created before the merge)
 - Reads report template from `templates/dev-result-template.md`
-- Implements tasks sequentially following the todo list
+- Implements tasks sequentially following the design's implementation task list (`T-nnn`)
 - Maintains code quality, follows existing patterns, includes appropriate tests
 - Reports progress after each task completion
 - Creates dev-result.md with implementation overview, changed files, technical details, and completion report
-- **`--team` option**: Analyzes todo.md dependencies and assigns independent tasks to parallel agents; file-level work splitting prevents concurrent edit conflicts
+- **Input resolution (5 branches)**: design.md missing → skip; design.md with §12 and no todo.md → proceed on design.md alone; design.md **without** §12 and no todo.md → **append `## 12. 実装タスク一覧` to design.md first** (announced to the user, never silently), then implement; when todo.md exists it is **always read together with design.md**, and design.md wins on conflict. Progress tasks are registered as `[T-nnn]` for design-derived items and `[todo i/N]` for todo.md-derived ones
+- **`--team` option**: Analyzes the dependency fields of the implementation task list and assigns independent tasks to parallel agents; file-level work splitting prevents concurrent edit conflicts
 - **Comma-separated multi-task mode (task-dev only)**: The 1st argument accepts `task1,task2,task3` to implement several tasks in one invocation. Whether the specifier contains a comma is evaluated **before** the `--team` branch, and it selects the execution mode:
   - **Parsing**: separator is `,` only; whitespace around commas, empty elements (`t1,,t2` / trailing comma), and task names outside `^[A-Za-z0-9._-]+$` are **errors** (immediate exit, nothing written). Duplicates are de-duplicated with a warning. A specifier without a comma keeps the legacy single-task behavior byte-for-byte
-  - **Pre-flight checks**: aborts entirely if not a git repository or if the working tree is dirty (the uncommitted file list is shown); per task, missing `design.md` / `todo.md` → skip (deliverable missing), existing `dev-result.md` → skip (already implemented). The target count is displayed without asking for confirmation
+  - **Pre-flight checks**: aborts entirely if not a git repository or if the working tree is dirty (the uncommitted file list is shown); per task, missing `design.md` → skip (deliverable missing), existing `dev-result.md` → skip (already implemented). The target count is displayed without asking for confirmation
   - **Delegation**: each task's implementation is delegated to an independent `general-purpose` subagent (synchronous, sequential — never parallel) so context does not accumulate across tasks. The subagent returns a fixed-format `STATUS` / `FILES` / `SUMMARY` payload; a malformed return is treated as a failure
   - **Commit per task**: stages only the files the subagent reported (`git add -- <paths>`; `git add -A` is prohibited) and commits with the task name as the message. No push, no branch operations, commits land on the branch active at start-up
   - **`--team` exclusivity**: with a comma-separated specifier, `--team` is ignored with a warning (a subagent cannot spawn further subagents). Single-task invocations keep full `--team` support
   - **Failure handling / idempotency**: a failed task aborts the run; already-committed tasks stay committed and are auto-skipped on re-run. A per-task result summary is always printed (success or abort)
 
 ### /task-review {task_name} [--team]
-- Reads req.md, design.md, todo.md, and dev-result.md to understand full context
+- Reads req.md, design.md, and dev-result.md to understand full context (todo.md is read as well when it exists)
 - Reads review template from `templates/review-template.md`
-- Verifies actual code against requirements, design, and todo completion status
+- Verifies actual code against requirements, design, and the completion status of the implementation task list (`T-nnn`)
 - Evaluates code quality (readability, maintainability, security, error handling, tests)
 - Creates review.md with overall judgment (no fix needed / fix recommended / fix required) and detailed findings
 - **`--team` option**: Deploys requirements/design consistency, code quality, and security/robustness reviewers in parallel; team lead deduplicates and prioritizes findings
@@ -214,7 +213,7 @@ Each task follows a standardized directory structure:
 
 ## Agent Teams オプション
 
-8つのスキル（task-init と task-verify-run を除く全スキル）は `--team` オプションに対応しています。
+7つのスキル（task-init と task-verify-run を除く全スキル）は `--team` オプションに対応しています。
 
 ### 使用方法
 
@@ -316,13 +315,13 @@ ToolSearch 結果の判定:
 
 | 検査ID | 内容 |
 |--------|------|
-| `frontmatter` | 全10スキルの `model` 不在 / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（既定は `<task_name> [--team]`。固有の引数を持つスキルのみ `ARGUMENT_HINT_OVERRIDES` で例外化する。現在の例外は **task-init**（URL 用）・**task-dev**（カンマ区切りの複数タスク用）・**task-verify**（`--manual` 用）・**task-verify-run**（`--team` 非対応）の4件） |
-| `common-block` | 8スキル（task-init / task-verify-run 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
+| `frontmatter` | 全9スキルの `model` 不在 / `disable-model-invocation: true` / `name`=ディレクトリ名 / `argument-hint`（既定は `<task_name> [--team]`。固有の引数を持つスキルのみ `ARGUMENT_HINT_OVERRIDES` で例外化する。現在の例外は **task-init**（URL 用）・**task-dev**（カンマ区切りの複数タスク用）・**task-verify**（`--manual` 用）・**task-verify-run**（`--team` 非対応）の4件） |
+| `common-block` | 7スキル（task-init / task-verify-run 除く）の Agent Teams 共通ブロックが task-dev を正準として sha256 一致するか |
 | `fallback-msg` | フォールバック文言が CLAUDE.md と SKILL.md で一致するか（整形差を正規化して照合） |
 | `meta-format` | 6テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
 | `env-json` | CLAUDE.md / README.md の `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` が一致するか |
 | `template-ref` | 6スキルのテンプレート参照が相対パスで実在し、ハードコード絶対パスの再混入がないか |
-| `flow-checklist` | 廃止済みの旧タスク管理ツール名・旧チーム生成 API 名が SKILL.md・CLAUDE.md（更新履歴節を除く）・README.md・テンプレートへ再混入していないか、および全10スキルに Task 方式＋フォールバックの記述を伴う `### ステップ0` が存在するか |
+| `flow-checklist` | 廃止済みの旧タスク管理ツール名・旧チーム生成 API 名が SKILL.md・CLAUDE.md（更新履歴節を除く）・README.md・テンプレートへ再混入していないか、および全9スキルに Task 方式＋フォールバックの記述を伴う `### ステップ0` が存在するか |
 
 実行方法:
 
@@ -406,7 +405,10 @@ skills/task-*/SKILL.mdファイルを追加・変更・削除した場合は、�
 
 ## 更新履歴
 
-最終更新: 2026-08-10 21:23:09
+最終更新: 2026-08-13 14:10:00
+更新内容: `task-design`（詳細設計）と `task-todo`（ToDoリスト＋工数見積もり）を **`task-design` 1スキルへ統合**（タスク名 `design`、設計書 `.claude/tasks/design/design.md`）。スキル数 10→**9**、`--team` 対応 8→**7**、開発フェーズ 8→**7**。**(1) 統合の狙い**: 従来は `task-design` が design.md を書き、`task-todo` が同じ design.md を**読み直して** todo.md を書くという往復があり、定型文レイヤ（frontmatter・引数の解釈・共通ブロック・パス解決・ステップ0・メタ情報の約120行）が丸ごと二重化していた。統合により設計から工数見積もりまでが1実行で完結し、スキル定義の合計は 646行 → **約510行**（約 −21%）に縮んだ。**(2) 設計確定線という文書構造**: 本改修の難所は「2つの Markdown を1つにまとめる」ことではなく、`task-todo` が持っていた**過大見積もり防止機構を統合後も実効的に機能させる**ことにあった。条文を機械的にコピーしても、設計と見積もりが同一の思考ブロックで進行すれば機能しない。そこで design.md を **§1〜§11（設計章）／§12 実装タスク一覧／§13 工数見積もり** に分け、その境界を「**設計確定線**」と定義した。見積もりフェーズで設計を書き換える行為は「文書の前方を書き換える」という目に見える異常操作になり、規定違反を検出できる。旧「既存の見積もりを先に見ない」（＝他者の数字への防御）は統合で前提が消えるため、**順序固定**と **read-only 規定**の2条文へ置き換え、`--team` の2フェーズ逐次実行がこれを構造的に担保する。**(3) サニティチェックの入力を設計側で先に確定させる**: 30行/h 未満で差し戻す検算は維持したが、統合により「概算行数」の出所が問題になる。`## 4. ファイル構造` に**行数記載義務**を新設し、その合計を §13-3 が引用する形に固定した（合計値の正は §4）。統合により設計と見積もりが同一実行に入ったため**差し戻しが無限ループする経路が新たに生じる**ことから、`task-verify-run` の先行事例に倣い **上限2回＋§A 合計値が同一なら即打ち切り**の終了保証を置いた（同一情報に対する再計算であり、3回目以降に新しい結論が出る見込みが乏しいため 5 ではなく 2）。**(4) `--team` は5担当2フェーズ逐次**: 設計3担当（並列）→ 完了後に見積もり2担当（分解・積み上げ担当／**削減レビュア**）。5担当を同時並列にしないのは、設計が確定しないと分解・積み上げができず、見積もり担当が未確定の設計を推測で埋めてしまうため。削減レビュアの非対称性（「減らすことが仕事」）と「上方バイアスを注入する指示の禁止」節は `task-todo` からそのまま移植した。**(5) `T-nnn` 消費契約（新規コンポーネント C-3）**: 本改修で最も重要な新規コンポーネントはコードではなく**規約**である。`## 12. 実装タスク一覧` を下流スキルが読む唯一のセクションとし、`` `T-nnn` ``（3桁ゼロ埋め・採番順＝実装順・欠番許容・重複禁止・ID 再利用禁止）で採番する。**欠番を許容する理由**は「欠番禁止」と「既存番号を振り直さない」が両立しないため（1件削除すれば必ず欠番が生じる）で、突合の安定性を優先し `task-verify` の `V-nnn` 規約と揃えた。**`task-dev` は design.md のチェックボックスを書き換えない**（design.md は入力仕様であり実行記録ではない。進捗は dev-result.md が持つ。verify.md が「手順書兼実行記録」であるのとは性質が異なる）。**(6) `task-dev` の入力解決を3状態×2形式の5分岐へ**（D-1〜D-14）: design.md 不在→スキップ／§12 あり＋todo.md なし→design.md 単独で着手（**新規許容パス**）／§12 なし＋todo.md なし→**§12 を design.md へ追記してから**着手（追記した旨を必ず表示）／todo.md あり→**必ず両方を参照**（design.md を正）。後方互換の必須要件として「**todo.md が存在すれば必ず読む**」を先に判定し、その後で §12 の有無を見る順序で条文化した（既存タスクが design.md 単独パスへ落ちてはならない）。事前検証スクリプトへ §12 の有無を表す `tasks=` 列を追加した。**(7) 削除順序の安全設計**: `TEMPLATE_FILES` が実体を失うと `read_text()` が `CheckError` を送出して **exit 2**（不整合の 1 ではない）となり、他の不整合が一切見えなくなる。このため `skills/task-todo/` の削除は `design-template.md` 新設と `check_consistency.py` 改修の**後**に行うことを規定し（S-2）、両者を同一コミットにまとめることを推奨に加えた。**(8) 旧 task-todo の残置は無害**: インストールが上書きコピーのため利用者環境の `~/.claude/skills/task-todo/` は自動削除されないが、旧スキルを実行しても生成されるのは todo.md のみで破壊的副作用がなく、改修後の `task-dev` が後方互換パスでそのまま受け止める。したがってアンインストール手順の記載も行わない。**(9) 整合性チェック追従**: 7検査の構成・`CHECKS`・`CANONICAL_SKILL`・`OBSOLETE_TOOL_RE`・`STEP0_REQUIRED_TERMS`・`ARGUMENT_HINT_OVERRIDES`（4件）はいずれも不変。`TEAM_SKILLS` 8→**7**（`ALL_SKILLS` は自動派生で 10→**9**）、`TEMPLATE_FILES` は `task-todo: todo-template.md` → `task-design: design-template.md` へ置換し**6件を維持**、自己申告文言の件数を更新した。回帰テストはケース(8) の fixture 対象を `task-todo` → **`task-req`**（標準形かつ他ケース未使用）へ差し替え、**新規ケース(15)** として「`TEMPLATE_FILES` が指すテンプレートの実体を削除 → **exit 2**」を追加し 15→**16ケース**（exit 2 を期待する初のケース）。**(10) 着手前スパイク2件の結果**: ①`run_case` は期待 exit コードを数値比較しており、期待検査ID は空文字なら照合をスキップするため **exit 2 をそのまま扱える**（追加工数なし）。②`task-req` は全15ケースのいずれでも fixture 対象になっておらず**衝突なし**（追加工数なし）。**(11) 未変更**: Agent Teams 共通ブロック（`common-block` sha256 `194236de7b1b…` 不変。編集はすべて `#### 役割分担` 以降と `## 手順` 以降に限定した）、成立2条件、フォールバック文言②、`env-json`、メタ情報3行/3値表記、`task-design` の `argument-hint`（`<task_name> [--team]` のまま。工数見積もりはフラグで任意化せず**無条件・常時出力**とした。任意化すると「見積もりなし design.md」という第3の形式が生まれ入力分岐がさらに増えるため）。**(12) 検証**: `python3 scripts/check_consistency.py -v` で全7検査 PASS（exit 0）、`bash scripts/test/run_consistency_tests.sh` で **16/16 PASS**（exit 0）。
+
+前回更新: 2026-08-10 21:23:09
 更新内容: 検証フェーズを「手順書を生成するだけ」から「**生成した手順に沿って Claude Code 自身が実行し、修正し、再確認する**」ところまで拡張（タスク名 `verify`、設計書 `.claude/tasks/verify/design.md`）。**(1) 新スキル `task-verify-run` を新設**（スキル数 9→**10**）: verify.md のチェックボックス項目を自動実行し、要修正事項を `verify-result.md` へ追記記録し、修正と再確認のループを**上限5回**まで回す。本スキル群で**初めて閉ループ（確認 → 修正 → 再確認）を導入**し、**リポジトリの実体と実行環境（DB・メール設定）を書き換える初のスキル**となる。`--team` は非対応（確認手順と期待結果が既に定まっており合議の価値が乏しく、修正がリポジトリを書き換えるため並列実行が競合する）。指定時はエラーにせず警告のうえ無視する。**(2) 自動化手段の先着採用チェーン**: `playwright-cli` → Chrome DevTools for agents（CLI 層）→ Chrome DevTools MCP（MCP 層）→ Claude in Chrome。判定はスキル実行あたり1回。手段ゼロなら**ブラウザ操作0件・保護措置適用前**に逐語文言を表示して中断する（`task-init` の「取得手段ゼロ＝何も作らない」と同型）。`task-init` のチェーンとほぼ逆順になる理由（あちらは認証済みページ閲覧が要件で実セッションが有利、こちらは無人反復が要件で決定的な CLI が有利）を SKILL.md 本文に明記した。**(3) 副作用の抑止と原状復帰**: 汎用要件を **P-MAIL（外部メール送信の遮断）** と **P-DB（DB のバックアップ・復元）** の2つに絞り、環境依存の実現手段は「プロバイダ」として分離して**検出できた場合のみ適用**する（P-MAIL 4種／P-DB 5種の先着採用）。各プロバイダは `detect` / `apply` / `verify` / `restore` の4操作を必ず持ち、**`verify` を持たないプロバイダは採用しない**（「バックアップしたつもり」で破壊的操作を許可するのが最悪の事故のため）。復帰情報は `apply` より**前**に `state: "planned"` で `.verify-run/state.json` へ書く（write-ahead）ため、途中で落ちても次回起動時の復旧が冪等な no-op になる。復帰順序は **DB → メール固定**（DB 復元が `active_plugins` 等を巻き戻すため）。SMTP 系プラグインの判定は既知リスト＋正規表現の2段構えとし、部分一致 `smtp|mail` を禁止した（`mailchimp` / `mailpoet` の巻き込み防止）。**(4) スキップ判定は5軸のフェイルセーフ**: 目視・主観／系外リソース／保護措置外の破壊的操作／手掛かり不在／判定不能。評価順を「軸2 → 軸4 → 軸3 → 軸1 → 軸5」としたのは副作用の可能性が高い軸から先に落とすため。軸1 は決定的なアサーションへ翻訳できれば救済するが、**スクリーンショットをモデルが見て「崩れていない」と判断することは決定的なアサーションとして認めない**（再現性がなく承認バイアスで無条件合格を出す危険があるため）。**(5) 終了保証**: ループ上限5＋停滞の機械判定（`<item_id>|<failure_class>|<evidence_hash>` の署名が2ループ連続で一致したら早期中断／前回の指摘が全て残り新規が増える状態が2回連続なら退行とみなし中断）＋修正でコード変更が0件なら即中断。加えて**1項目あたりの操作予算**（ブラウザ15回／コマンド3回）を置いた。req.md の「タイムアウトを設けない」は**時間軸**の規定であり操作回数は別軸であること、上限がないと要素が見つからない1項目で数万トークンを消費する経路が実在することを根拠に、要件の趣旨と衝突しうる点も含めて明示的に採用を判断した。**(6) 安全境界**: **コミットしない**（`git add` すら行わずインデックスにも触れない。`task-dev` 複数タスクモードとの差分）。実行開始時に作業ツリーが dirty なら中断するが、`state.json` が中断からの再開を示す場合のみ自身の変更による dirty を許容する。`.git/**`・他タスクディレクトリ・`<PROJECT_ROOT>` 外・`node_modules`／`vendor`・秘密情報への書き込みを禁止列挙した。ブラウザ操作は許可ホスト（ループバック／ローカル TLD／プライベート IP）に限定し、外部 IdP ログイン・2FA・決済確定・実メール受信箱アクセスは**承認の有無にかかわらず禁止**とした。**(7) `task-verify` の生成方針を転換**（意図的な非互換）: 既定の出力を「自動実行を前提とした詳細なテストケース」へ変更し、現行の簡潔版は **`--manual`** で選択する形に降格した（`argument-hint` は `"<task_name> [--manual] [--team]"`）。詳細版は機械可読な `## 検証前提`（yaml）を先頭に持ち、全項目へ安定識別子 `` `V-nnn` `` を採番し、**期待結果の省略を禁止**する。「付録: 自動化推奨の確認観点」は**両モードとも廃止**（同じ観点が2形態で二重管理になるため。詳細版では実行可能な手順として本文へ統合し、簡潔版では書かない）。`--team` の3担当は出力モードで非対称に切り替え、**削減レビュアは `--manual` 時のみ起動**、詳細版では「自動実行可能性レビュア」を立てる（詳細版で問題になるのは分量ではなく実行不能な項目が混ざることのため）。あわせて「チームメイトへの依頼時の禁止事項」も2系列化し、詳細版では**簡潔さバイアスを注入する指示を禁止**した。**(8) 実装の裏取り（着手前スパイク3件）**: ①本環境で利用可能な自動化手段は **優先度1（playwright-cli v0.1.9）と優先度4（Claude in Chrome）のみ**。優先度2は chrome-devtools 系スキル・CLI コマンドとも不在、優先度3は `ToolSearch` に `mcp__chrome-devtools__*` が現れず、**いずれも実コマンド名・ツール名を特定できなかった**ため、優先度2は「スキルの SKILL.md を Read してコマンド名を特定する」という抽象記述のまま残した（プラグインの新規導入は環境変更を伴うため行っていない）。②ステップ0 定型文の sha256 は設計時の実測値（前半 `9b1d543131c7` / 後半 `fc0566f8773b`）と**7スキルすべてで一致**したため、`task-init` と同じく `--team` 段落を落とした形でバイトコピーした（改変は「Agent Teams とは無関係です」の1行のみ）。③`playwright-cli` の `cookie-clear` は `page.context().clearCookies()`（**コンテキスト全体**）、`localstorage-clear` / `sessionstorage-clear` は `page.evaluate(() => …clear())`（**現在ページのオリジン限定**）であることを実測し、ループ間リセットの表に「対象オリジンのページを開いた状態で実行する」旨を追記した。**(9) 整合性チェック追従**: 7検査の構成・`CHECKS`・`OBSOLETE_TOOL_RE`・`STEP0_REQUIRED_TERMS` はいずれも不変。`ALL_SKILLS` 9→**10**、`TEMPLATE_FILES` 5→**6**、`ARGUMENT_HINT_OVERRIDES` 2→**4**件（`task-verify` / `task-verify-run` を追加）と、自己申告文言（「全9スキル」→「全10スキル」等）を更新した。回帰テストはケース(12)〜(15) を追加し 11→**15ケース**（task-verify-run と task-verify の `argument-hint` 差し戻し2件＝`ARGUMENT_HINT_OVERRIDES` の新規例外が効いていることの検証／新テンプレートの3値表記崩し＝`TEMPLATE_FILES` の 5→6 が効いていることの検証／task-verify-run のステップ0 節欠落＝`ALL_SKILLS` の 9→10 が効いていることの検証）。**(10) 未変更**: Agent Teams 共通ブロック（`task-verify` の L42–L97 は**1バイトも変更せず** `common-block` sha256 不変）、成立2条件、フォールバック文言②、`env-json`、メタ情報3行/3値表記、他8スキルの SKILL.md、他4テンプレート。**(11) 検証**: `python3 scripts/check_consistency.py -v` で全7検査 PASS（exit 0）、`bash scripts/test/run_consistency_tests.sh` で **15/15 PASS**（exit 0）。**(12) 未実施**: design.md §10-1 の A-8「実地スモーク」（詳細版 verify.md の生成 → `/task-verify-run` の1周実行）は、対象アプリケーションを持たない本リポジトリでは実施できないため見送った（詳細は `.claude/tasks/verify/dev-result.md`）。
 
 前回更新: 2026-08-06 22:30:00

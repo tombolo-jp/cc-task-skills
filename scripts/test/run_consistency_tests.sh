@@ -9,6 +9,8 @@
 #      argument-hint 例外の差し戻し3件（task-dev / task-verify-run / task-verify）の計4件、
 #      flow-checklist は廃止ツール名の再混入・ステップ0 節の欠落2件・ステップ0 からの
 #      Task 記述欠落の4件、meta-format は3値表記崩し2件）。
+#   3. 検査対象ファイルの実体欠落は不整合（exit 1）ではなく実行エラー（exit 2）になる。
+#      TEMPLATE_FILES の消し忘れ退行を検出するため、これを独立したケースで確認する。
 #
 # 依存: bash / python3 / 標準コマンドのみ（テストフレームワーク不使用）。
 # CI 組込み可: このスクリプトの終了コードが 0 なら全テスト合格。
@@ -207,7 +209,7 @@ run_case "flow-checklist 異常（廃止ツール名の再混入）→ exit 1" "
 # (8) flow-checklist: ステップ0 見出しごと削除して構造確認を落とす
 # ---------------------------------------------------------------------------
 F="$(make_fixture flow-checklist-step0)"
-/usr/bin/python3 - "${F}/skills/task-todo/SKILL.md" <<'PY'
+/usr/bin/python3 - "${F}/skills/task-req/SKILL.md" <<'PY'
 import re
 import sys
 p = sys.argv[1]
@@ -367,6 +369,16 @@ assert len(out) < len(lines), "fixture 生成失敗: ステップ0 節が見つ�
 open(p, "w", encoding="utf-8").write("".join(out))
 PY
 run_case "flow-checklist 異常（task-verify-run のステップ0 節欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
+
+# ---------------------------------------------------------------------------
+# (15) 実行エラー: TEMPLATE_FILES が指すテンプレートの実体を削除 → exit 2
+#      （TEMPLATE_FILES の消し忘れ退行は exit 1 ではなく 2 になることの検証。
+#        スキルを削除したのに TEMPLATE_FILES を更新し忘れると、不整合ではなく
+#        実行エラーとして落ちるため、他の不整合が一切見えなくなる）
+# ---------------------------------------------------------------------------
+F="$(make_fixture template-missing)"
+rm -f "${F}/skills/task-design/templates/design-template.md"
+run_case "実行エラー（テンプレート実体の欠落）→ exit 2" "${F}" 2 ""
 
 # ---------------------------------------------------------------------------
 # 集計
