@@ -26,7 +26,7 @@ from pathlib import Path
 # 定数定義
 # ---------------------------------------------------------------------------
 
-# Agent Teams 対応スキル（task-init / task-verify-run を除く7スキル）。common-block 検査対象。
+# Agent Teams 対応スキル（task-init を除く7スキル）。common-block 検査対象。
 TEAM_SKILLS = [
     "task-dev",
     "task-req",
@@ -40,17 +40,17 @@ TEAM_SKILLS = [
 # common-block 検査の正準（基準）スキル（design D-7）。
 CANONICAL_SKILL = "task-dev"
 
-# 全9スキル（frontmatter 検査対象）。
-ALL_SKILLS = ["task-init", "task-verify-run"] + TEAM_SKILLS
+# 全8スキル（frontmatter 検査対象）。
+ALL_SKILLS = ["task-init"] + TEAM_SKILLS
 
 # テンプレートを持つスキルと、そのテンプレートファイル名（meta-format / template-ref 検査対象）。
+# 値はリスト: 1スキルが複数テンプレートを持ちうる（task-verify は生成用と実行結果用の2件）。
 TEMPLATE_FILES = {
-    "task-dev": "dev-result-template.md",
-    "task-fix": "fix-result-template.md",
-    "task-review": "review-template.md",
-    "task-design": "design-template.md",
-    "task-verify": "verify-template.md",
-    "task-verify-run": "verify-result-template.md",
+    "task-dev": ["dev-result-template.md"],
+    "task-fix": ["fix-result-template.md"],
+    "task-review": ["review-template.md"],
+    "task-design": ["design-template.md"],
+    "task-verify": ["verify-template.md", "verify-result-template.md"],
 }
 
 # frontmatter の argument-hint 期待値。既定は --team 用の1形式とし、
@@ -59,8 +59,8 @@ ARGUMENT_HINT_TEAM = "<task_name> [--team]"
 ARGUMENT_HINT_OVERRIDES = {
     "task-init": "<task_name> [<URL>]",                     # 第2引数に取得元 URL を取る
     "task-dev": "<task_name>[,<task_name>...] [--team]",    # 第1引数にカンマ区切りの複数タスクを取る
-    "task-verify": "<task_name> [--manual] [--team]",       # 出力モード切替 --manual を取る
-    "task-verify-run": "<task_name>",                       # --team 非対応（並列実行が競合するため）
+    # 出力モード切替 --manual と実行モード切替 --run-only を取る
+    "task-verify": "<task_name> [--manual] [--run-only] [--team]",
 }
 
 # メタ情報 Agent Teams 行の3値表記（厳密一致）。
@@ -71,15 +71,18 @@ META_DATETIME_LINE = "- 実行日時: [日時]"
 # env-json で両ファイルに存在すべき行（前後空白は無視して比較）。
 ENV_JSON_LINE = '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"'
 
-# flow-checklist: 廃止済みツール名（本文への再混入を禁止する）。
+# flow-checklist: 廃止済みツール名・廃止済み起動名（本文への再混入を禁止する）。
 # TodoWrite は構造化 Task ツールへ移行済み（Claude Code v2.1.142 以降）、
 # TeamCreate / TeamDelete は 2026-06-17 に廃止済み。
-OBSOLETE_TOOL_RE = re.compile(r"TodoWrite|TeamCreate|TeamDelete")
+# /task-verify-run は 2026-08-13 に task-verify へ統合され起動名ごと廃止（互換名を残さない）。
+# スラッシュ前置に限定するのは、内部作業領域 `.verify-run/`・スナップショット名 `verify-run-<run_id>`・
+# `00-verify-run-mail-block.php` を巻き込まないため。
+OBSOLETE_NAME_RE = re.compile(r"TodoWrite|TeamCreate|TeamDelete|/task-verify-run")
 
 # flow-checklist: CLAUDE.md でこの見出し以降は歴史的記録として走査対象から除外する。
 HISTORY_HEADING = "## 更新履歴"
 
-# flow-checklist: 全9スキルのステップ0 節に含まれるべき語。
+# flow-checklist: 全8スキルのステップ0 節に含まれるべき語。
 # 「Task」= 主経路（Task ツール方式）、「チェックリスト」= フォールバック、
 # 「省略不可」= 登録／宣言が必須要素であることの明記。3語すべてを要求することで
 # 主経路とフォールバックの双方が記述されていることを機械的に保証する。
@@ -180,8 +183,14 @@ class Repo:
     def skill_md(self, skill):
         return self.root / "skills" / skill / "SKILL.md"
 
-    def template_md(self, skill):
-        return self.root / "skills" / skill / "templates" / TEMPLATE_FILES[skill]
+    def template_mds(self, skill):
+        """1スキルが持つ全テンプレートの Path をリストで返す。"""
+        base = self.root / "skills" / skill / "templates"
+        return [base / name for name in TEMPLATE_FILES[skill]]
+
+    def template_paths(self):
+        """TEMPLATE_FILES 全件を平坦化した Path のリスト（宣言順）。"""
+        return [p for skill in TEMPLATE_FILES for p in self.template_mds(skill)]
 
     @property
     def claude_md(self):
@@ -289,7 +298,7 @@ def make_diff(expected, actual, expected_label, actual_label):
 # ---------------------------------------------------------------------------
 
 def check_frontmatter(repo):
-    """[frontmatter] 全9スキルの model 不在 / disable-model-invocation / name / argument-hint 規約準拠。"""
+    """[frontmatter] 全8スキルの model 不在 / disable-model-invocation / name / argument-hint 規約準拠。"""
     check_id = "frontmatter"
     problems = []
     for skill in ALL_SKILLS:
@@ -335,7 +344,7 @@ def check_frontmatter(repo):
             "frontmatter 規約に不一致があります",
             "\n".join("    " + p for p in problems),
         )
-    return CheckResult(check_id, True, "全9スキルの model 不在/disable-model-invocation/name/argument-hint 規約準拠")
+    return CheckResult(check_id, True, "全8スキルの model 不在/disable-model-invocation/name/argument-hint 規約準拠")
 
 
 def check_common_block(repo):
@@ -455,8 +464,7 @@ def check_meta_format(repo):
     expected = [META_MODEL_LINE, META_DATETIME_LINE, META_AGENT_TEAMS_LINE]
     problems = []
 
-    for skill in TEMPLATE_FILES:
-        path = repo.template_md(skill)
+    for path in repo.template_paths():
         text = repo.text(path)
         loc = rel(repo.root, path)
         lines = text.splitlines()
@@ -526,7 +534,7 @@ def check_env_json(repo):
 def check_template_ref(repo):
     """[template-ref] テンプレート参照の実在確認＋ハードコード絶対パス再混入検出。
 
-    - 6 SKILL.md 本文の `templates/X-template.md` 参照を抽出し、当該スキルの templates/ 配下に
+    - 5 SKILL.md 本文の `templates/X-template.md` 参照を抽出し、当該スキルの templates/ 配下に
       実ファイルが存在するか pathlib で確認。
     - 併せて `~/.claude/skills/.../templates/` のハードコード絶対パス再混入を検出。
       ただし README/CLAUDE のインストールコマンド `cp -r ... ~/.claude/skills/` 文脈は除外。
@@ -569,7 +577,7 @@ def check_template_ref(repo):
         )
     return CheckResult(
         check_id, True,
-        "6スキルのテンプレート参照が相対パスで実在し、ハードコード絶対パスの再混入なし",
+        "5スキル6テンプレートの参照が相対パスで実在し、ハードコード絶対パスの再混入なし",
     )
 
 
@@ -594,11 +602,11 @@ def _extract_step0_section(text):
 
 
 def check_flow_checklist(repo):
-    """[flow-checklist] 廃止済みツール名の再混入検出＋全9スキルのステップ0 構造確認。
+    """[flow-checklist] 廃止済みツール名・起動名の再混入検出＋全8スキルのステップ0 構造確認。
 
-    - 検出: 全9 SKILL.md / CLAUDE.md / README.md / 6テンプレートに `TodoWrite` / `TeamCreate` /
-      `TeamDelete` が残存していないか。CLAUDE.md のみ `## 更新履歴` 以降を歴史的記録として除外する。
-    - 構造: 全9 SKILL.md に `### ステップ0` 見出しが存在し、その節に「Task」「チェックリスト」
+    - 検出: 全8 SKILL.md / CLAUDE.md / README.md / 6テンプレートに `TodoWrite` / `TeamCreate` /
+      `TeamDelete` / `/task-verify-run` が残存していないか。CLAUDE.md のみ `## 更新履歴` 以降を歴史的記録として除外する。
+    - 構造: 全8 SKILL.md に `### ステップ0` 見出しが存在し、その節に「Task」「チェックリスト」
       「省略不可」が含まれること（Task 方式＋フォールバックの双方が記述されていることの担保）。
     """
     check_id = "flow-checklist"
@@ -606,7 +614,7 @@ def check_flow_checklist(repo):
 
     # --- 目的1: 廃止済みツール名の残存検出 ---
     targets = [repo.skill_md(s) for s in ALL_SKILLS]
-    targets += [repo.template_md(s) for s in TEMPLATE_FILES]
+    targets += repo.template_paths()
     targets += [repo.claude_md, repo.readme_md]
 
     for path in targets:
@@ -621,9 +629,9 @@ def check_flow_checklist(repo):
                     limit = i
                     break
         for lineno, line in enumerate(lines[:limit], 1):
-            if OBSOLETE_TOOL_RE.search(line):
+            if OBSOLETE_NAME_RE.search(line):
                 problems.append(
-                    f"{loc}:{lineno}: 廃止済みツール名が再混入しています: "
+                    f"{loc}:{lineno}: 廃止済みツール名／起動名が再混入しています: "
                     f"{line.strip()}"
                 )
 
@@ -651,7 +659,7 @@ def check_flow_checklist(repo):
         )
     return CheckResult(
         check_id, True,
-        "廃止済みツール名の再混入なし・全9スキルのステップ0 が Task 方式（フォールバック付き）",
+        "廃止済みツール名・起動名の再混入なし・全8スキルのステップ0 が Task 方式（フォールバック付き）",
     )
 
 

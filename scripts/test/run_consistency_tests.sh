@@ -6,9 +6,9 @@
 #   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
 #      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
 #      検査によっては観点ごとに複数の fixture を持つ（例: frontmatter は model 再混入と
-#      argument-hint 例外の差し戻し3件（task-dev / task-verify-run / task-verify）の計4件、
-#      flow-checklist は廃止ツール名の再混入・ステップ0 節の欠落2件・ステップ0 からの
-#      Task 記述欠落の4件、meta-format は3値表記崩し2件）。
+#      argument-hint 例外の差し戻し3件（task-dev / task-init / task-verify）の計4件、
+#      flow-checklist は廃止ツール名／起動名の再混入2件・ステップ0 節の欠落2件・
+#      ステップ0 からの Task 記述欠落の5件、meta-format は3値表記崩し2件）。
 #   3. 検査対象ファイルの実体欠落は不整合（exit 1）ではなく実行エラー（exit 2）になる。
 #      TEMPLATE_FILES の消し忘れ退行を検出するため、これを独立したケースで確認する。
 #
@@ -292,26 +292,26 @@ PY
 run_case "flow-checklist 異常（ステップ0 の Task 記述欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
-# (11) frontmatter: task-verify-run の argument-hint を既定値へ差し戻す
-#      ARGUMENT_HINT_OVERRIDES へ追加した --team 非対応スキルの例外が効いていることを検証する。
+# (11) frontmatter: task-init の argument-hint を既定値へ差し戻す
+#      ARGUMENT_HINT_OVERRIDES の例外（URL を第2引数に取るスキル）が効いていることを検証する。
 # ---------------------------------------------------------------------------
-F="$(make_fixture frontmatter-argument-hint-verify-run)"
-/usr/bin/python3 - "${F}/skills/task-verify-run/SKILL.md" <<'PY'
+F="$(make_fixture frontmatter-argument-hint-init)"
+/usr/bin/python3 - "${F}/skills/task-init/SKILL.md" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
 t = t.replace(
-    'argument-hint: "<task_name>"',
+    'argument-hint: "<task_name> [<URL>]"',
     'argument-hint: "<task_name> [--team]"',
     1,
 )
 open(p, "w", encoding="utf-8").write(t)
 PY
-run_case "frontmatter 異常（task-verify-run の argument-hint 差し戻し）→ exit 1" "${F}" 1 "[frontmatter]"
+run_case "frontmatter 異常（task-init の argument-hint 差し戻し）→ exit 1" "${F}" 1 "[frontmatter]"
 
 # ---------------------------------------------------------------------------
 # (12) frontmatter: task-verify の argument-hint を旧値（既定値）へ差し戻す
-#      --manual を落として既定値と一致してしまう実装ミスは、この fixture でのみ検出できる。
+#      --manual / --run-only を落として既定値と一致してしまう実装ミスは、この fixture でのみ検出できる。
 # ---------------------------------------------------------------------------
 F="$(make_fixture frontmatter-argument-hint-verify)"
 /usr/bin/python3 - "${F}/skills/task-verify/SKILL.md" <<'PY'
@@ -319,7 +319,7 @@ import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
 t = t.replace(
-    'argument-hint: "<task_name> [--manual] [--team]"',
+    'argument-hint: "<task_name> [--manual] [--run-only] [--team]"',
     'argument-hint: "<task_name> [--team]"',
     1,
 )
@@ -329,10 +329,10 @@ run_case "frontmatter 異常（task-verify の argument-hint 差し戻し）→ 
 
 # ---------------------------------------------------------------------------
 # (13) meta-format: 新テンプレート（verify-result-template.md）の3値表記を崩す
-#      TEMPLATE_FILES の 5→6 が効いていること自体を検証する。
+#      TEMPLATE_FILES が 1スキル複数テンプレート（task-verify の2件目）を扱えていることを検証する。
 # ---------------------------------------------------------------------------
 F="$(make_fixture meta-format-verify-result)"
-/usr/bin/python3 - "${F}/skills/task-verify-run/templates/verify-result-template.md" <<'PY'
+/usr/bin/python3 - "${F}/skills/task-verify/templates/verify-result-template.md" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
@@ -346,12 +346,12 @@ PY
 run_case "meta-format 異常（新テンプレートの3値表記崩し）→ exit 1" "${F}" 1 "[meta-format]"
 
 # ---------------------------------------------------------------------------
-# (14) flow-checklist: task-verify-run のステップ0 節を欠落させる
-#      ALL_SKILLS の 9→10 が効いていること自体を検証する。ケース(8) と同じ手法で
+# (14) flow-checklist: task-req-update のステップ0 節を欠落させる
+#      ALL_SKILLS が全8スキルを走査していること自体を検証する。ケース(8) と同じ手法で
 #      step0 節をスライス削除する（他検査を巻き込まないため範囲を限定する）。
 # ---------------------------------------------------------------------------
-F="$(make_fixture flow-checklist-step0-verify-run)"
-/usr/bin/python3 - "${F}/skills/task-verify-run/SKILL.md" <<'PY'
+F="$(make_fixture flow-checklist-step0-req-update)"
+/usr/bin/python3 - "${F}/skills/task-req-update/SKILL.md" <<'PY'
 import sys
 p = sys.argv[1]
 lines = open(p, encoding="utf-8").read().splitlines(keepends=True)
@@ -368,7 +368,7 @@ for i, ln in enumerate(lines):
 assert len(out) < len(lines), "fixture 生成失敗: ステップ0 節が見つかりません"
 open(p, "w", encoding="utf-8").write("".join(out))
 PY
-run_case "flow-checklist 異常（task-verify-run のステップ0 節欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
+run_case "flow-checklist 異常（task-req-update のステップ0 節欠落）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # (15) 実行エラー: TEMPLATE_FILES が指すテンプレートの実体を削除 → exit 2
@@ -379,6 +379,25 @@ run_case "flow-checklist 異常（task-verify-run のステップ0 節欠落）�
 F="$(make_fixture template-missing)"
 rm -f "${F}/skills/task-design/templates/design-template.md"
 run_case "実行エラー（テンプレート実体の欠落）→ exit 2" "${F}" 2 ""
+
+# ---------------------------------------------------------------------------
+# (16) flow-checklist: 廃止した起動名 /task-verify-run を SKILL.md へ再混入させる
+#      OBSOLETE_NAME_RE への /task-verify-run 追加が効いていることを検証する。
+#      ケース(7)（廃止ツール名の再混入）と同じ機構だが、検出対象が「起動名」である点が異なる。
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-obsolete-run-name)"
+/usr/bin/python3 - "${F}/skills/task-verify/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+t = t.replace(
+    "## 完了後",
+    "## 完了後\n\n（旧導線: `/task-verify-run <task_name>` で自動実行できます）",
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "flow-checklist 異常（廃止起動名 /task-verify-run の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # 集計
