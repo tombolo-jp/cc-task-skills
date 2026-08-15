@@ -101,10 +101,10 @@ PY
 run_case "frontmatter 異常（model 再混入）→ exit 1" "${F}" 1 "[frontmatter]"
 
 # ---------------------------------------------------------------------------
-# (2) common-block: task-review の共通ブロック内文言を1文字変える
+# (2) common-block: task-req-update の共通ブロック内文言を1文字変える
 # ---------------------------------------------------------------------------
 F="$(make_fixture common-block)"
-/usr/bin/python3 - "${F}/skills/task-review/SKILL.md" <<'PY'
+/usr/bin/python3 - "${F}/skills/task-req-update/SKILL.md" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
@@ -112,7 +112,7 @@ t = open(p, encoding="utf-8").read()
 t = t.replace("今回は通常モードで実行します。", "今回は通常モードで実行します!", 1)
 open(p, "w", encoding="utf-8").write(t)
 PY
-run_case "common-block 異常（task-review 改変）→ exit 1" "${F}" 1 "[common-block]"
+run_case "common-block 異常（task-req-update 改変）→ exit 1" "${F}" 1 "[common-block]"
 
 # ---------------------------------------------------------------------------
 # (3) fallback-msg: CLAUDE.md 側のフォールバック文言②を改変
@@ -141,7 +141,7 @@ run_case "fallback-msg 異常（CLAUDE.md 文言②改変）→ exit 1" "${F}" 1
 # (4) meta-format: テンプレートの Agent Teams 3値表記を崩す
 # ---------------------------------------------------------------------------
 F="$(make_fixture meta-format)"
-/usr/bin/python3 - "${F}/skills/task-review/templates/review-template.md" <<'PY'
+/usr/bin/python3 - "${F}/skills/task-verify/templates/verify-template.md" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
@@ -172,14 +172,17 @@ run_case "env-json 異常（README.md から削除）→ exit 1" "${F}" 1 "[env-
 # (6) template-ref: ハードコード絶対パスを SKILL.md 本文へ再混入
 # ---------------------------------------------------------------------------
 F="$(make_fixture template-ref)"
-/usr/bin/python3 - "${F}/skills/task-fix/SKILL.md" <<'PY'
+# 置換対象は共通ブロック（`### 重要: --team` 〜 `#### 役割分担` の直前）より
+# **後方**の参照であること。前方を書き換えると common-block も同時に落ち、
+# このケースが単一検査を狙っていることが分からなくなる。
+/usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
 # 本文中の相対参照を、ハードコード絶対パスへ差し戻す（再混入を模す）。
 t = t.replace(
-    "templates/fix-result-template.md",
-    "~/.claude/skills/task-fix/templates/fix-result-template.md",
+    "templates/dev-result-template.md",
+    "~/.claude/skills/task-dev/templates/dev-result-template.md",
     1,
 )
 open(p, "w", encoding="utf-8").write(t)
@@ -187,10 +190,10 @@ PY
 run_case "template-ref 異常（絶対パス再混入）→ exit 1" "${F}" 1 "[template-ref]"
 
 # ---------------------------------------------------------------------------
-# (7) flow-checklist: 廃止済みツール名を task-review のステップ0 へ再混入
+# (7) flow-checklist: 廃止済みツール名を task-req のステップ0 へ再混入
 # ---------------------------------------------------------------------------
 F="$(make_fixture flow-checklist-tool)"
-/usr/bin/python3 - "${F}/skills/task-review/SKILL.md" <<'PY'
+/usr/bin/python3 - "${F}/skills/task-req/SKILL.md" <<'PY'
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
@@ -398,6 +401,48 @@ t = t.replace(
 open(p, "w", encoding="utf-8").write(t)
 PY
 run_case "flow-checklist 異常（廃止起動名 /task-verify-run の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
+
+# ---------------------------------------------------------------------------
+# (18) flow-checklist: 廃止した起動名 /task-review を SKILL.md へ再混入させる
+#      OBSOLETE_NAME_RE への /task-review 追加が効いていることを検証する。
+#      (19) と1件にまとめないこと（片方の枝だけが消えた退行を検出できなくなるため）。
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-obsolete-review-name)"
+/usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+ANCHOR = "## 完了後"
+assert ANCHOR in t, "fixture 生成失敗: 完了後セクションが見つかりません"
+# 共通ブロック（`### 重要: --team` 〜 `#### 役割分担` の直前）より後方へ挿入すること。
+t = t.replace(
+    ANCHOR,
+    ANCHOR + "\n\n（旧導線: `/task-review <task_name>` でレビューできます）",
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "flow-checklist 異常（廃止起動名 /task-review の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
+
+# ---------------------------------------------------------------------------
+# (19) flow-checklist: 廃止した起動名 /task-fix を SKILL.md へ再混入させる
+#      OBSOLETE_NAME_RE への /task-fix 追加が効いていることを検証する。
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-obsolete-fix-name)"
+/usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+ANCHOR = "## 完了後"
+assert ANCHOR in t, "fixture 生成失敗: 完了後セクションが見つかりません"
+t = t.replace(
+    ANCHOR,
+    ANCHOR + "\n\n（旧導線: `/task-fix <task_name>` で修正できます）",
+    1,
+)
+open(p, "w", encoding="utf-8").write(t)
+PY
+run_case "flow-checklist 異常（廃止起動名 /task-fix の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # 集計
