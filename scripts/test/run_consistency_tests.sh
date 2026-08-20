@@ -3,12 +3,13 @@
 #
 # 方針:
 #   1. 正常リポジトリ（このリポジトリ自身）を --root で検査 → exit 0 を確認。
-#   2. 7検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
+#   2. 8検査それぞれについて、リポジトリのコピーを作り該当箇所を1点だけ壊した fixture を
 #      生成 → exit 1 かつ期待する検査ID（[check-id]）が出力に含まれることを確認。
 #      検査によっては観点ごとに複数の fixture を持つ（例: frontmatter は model 再混入と
 #      argument-hint 例外の差し戻し3件（task-dev / task-init / task-verify）の計4件、
 #      flow-checklist は廃止ツール名／起動名の再混入2件・ステップ0 節の欠落2件・
-#      ステップ0 からの Task 記述欠落の5件、meta-format は3値表記崩し2件）。
+#      ステップ0 からの Task 記述欠落の5件、meta-format は3値表記崩し2件、
+#      no-workflow は SKILL.md / CLAUDE.md / テンプレートへの再混入3件）。
 #   3. 検査対象ファイルの実体欠落は不整合（exit 1）ではなく実行エラー（exit 2）になる。
 #      TEMPLATE_FILES の消し忘れ退行を検出するため、これを独立したケースで確認する。
 #
@@ -443,6 +444,49 @@ t = t.replace(
 open(p, "w", encoding="utf-8").write(t)
 PY
 run_case "flow-checklist 異常（廃止起動名 /task-fix の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
+
+# ---------------------------------------------------------------------------
+# (20) no-workflow: SKILL.md へ Workflow スクリプトの必須宣言を挿入する
+#      Dynamic Workflows は全6スキルで使用しない方針であり、実行方式が黙って
+#      戻ることを防ぐためランタイム固有の API 名を機械的に検出する。
+# ---------------------------------------------------------------------------
+F="$(make_fixture no-workflow-skill-md)"
+/usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'NWA'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t + "\n```js\nexport const meta = {\n  name: \"x\"\n};\n```\n")
+NWA
+run_case "no-workflow 異常（SKILL.md へ export const meta の再混入）→ exit 1" "${F}" 1 "[no-workflow]"
+
+# ---------------------------------------------------------------------------
+# (21) no-workflow: CLAUDE.md へ委譲呼び出し名を挿入する
+#      許可マーカーを持たない行なので検出されなければならない。
+# ---------------------------------------------------------------------------
+F="$(make_fixture no-workflow-claude-md)"
+/usr/bin/python3 - "${F}/CLAUDE.md" <<'NWB'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+ANCHOR = "## Task Management Structure"
+assert ANCHOR in t, "fixture 生成失敗: Task Management Structure 節が見つかりません"
+t = t.replace(ANCHOR, "レビューの委譲は `agent()` を主経路とする。\n\n" + ANCHOR, 1)
+open(p, "w", encoding="utf-8").write(t)
+NWB
+run_case "no-workflow 異常（CLAUDE.md へ agent() の再混入）→ exit 1" "${F}" 1 "[no-workflow]"
+
+# ---------------------------------------------------------------------------
+# (22) no-workflow: テンプレートへ並列ファンアウト呼び出し名を挿入する
+#      検査対象はテンプレート4件も含む（flow-checklist と同一の対象集合）。
+# ---------------------------------------------------------------------------
+F="$(make_fixture no-workflow-template)"
+/usr/bin/python3 - "${F}/skills/task-dev/templates/dev-result-template.md" <<'NWC'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t + "\n<!-- parallel( でファンアウトした体数 -->\n")
+NWC
+run_case "no-workflow 異常（テンプレートへ parallel( の再混入）→ exit 1" "${F}" 1 "[no-workflow]"
 
 # ---------------------------------------------------------------------------
 # 集計

@@ -90,6 +90,24 @@ HISTORY_HEADING = "## 更新履歴"
 STEP0_HEADING_RE = re.compile(r"^### ステップ0")
 STEP0_REQUIRED_TERMS = ["Task", "チェックリスト", "省略不可"]
 
+# no-workflow: Dynamic Workflows のランタイム固有 API 名。
+# 単語 `Workflow` そのものは禁止しない（禁止すると CLAUDE.md / README.md に置く
+# 「Dynamic Workflows を使用しない」という方針記述自体が検出され、検査が成立しないため）。
+# 再導入すれば必ず本文に現れる API 名だけを禁止語彙とする。
+NO_WORKFLOW_PATTERNS = [
+    (re.compile(r"export\s+const\s+meta"), "export const meta"),
+    (re.compile(r"\bresumeFromRunId\b"), "resumeFromRunId"),
+    (re.compile(r"\bscriptPath\b"), "scriptPath"),
+    (re.compile(r"(?<![A-Za-z_$.])agent\("), "agent("),
+    (re.compile(r"(?<![A-Za-z_$.])parallel\("), "parallel("),
+    (re.compile(r"(?<![A-Za-z_$.])pipeline\("), "pipeline("),
+    (re.compile(r"(?<![A-Za-z_$.])phase\("), "phase("),
+]
+
+# no-workflow: 許可マーカー。検査自体を説明する行（禁止語彙を字面として列挙せざるを
+# えない行）だけがこれを付けてよい。付けた行はその行のみ検査対象から外れる。
+NO_WORKFLOW_ALLOW_MARKER = "<!-- allow-workflow-mention -->"
+
 
 # ---------------------------------------------------------------------------
 # CheckResult データ構造
@@ -295,7 +313,7 @@ def make_diff(expected, actual, expected_label, actual_label):
 
 
 # ---------------------------------------------------------------------------
-# 検査関数群（§7.2 の7検査）
+# 検査関数群（§7.2 の7検査 ＋ workflow-script）
 # ---------------------------------------------------------------------------
 
 def check_frontmatter(repo):
@@ -664,6 +682,61 @@ def check_flow_checklist(repo):
     )
 
 
+def check_no_workflow(repo):
+    """[no-workflow] Dynamic Workflows のランタイム API 名が再混入していないか。
+
+    本リポジトリは全6スキルで `Workflow` ツールを使用しない（委譲は `name` を付けない
+    同期 `Agent` 委譲のみ）。実行方式が黙って戻ることを防ぐため、ランタイム固有の
+    API 名（`export const meta` / `resumeFromRunId` / `scriptPath` / `agent(` /
+    `parallel(` / `pipeline(` / `phase(`）を禁止語彙として機械的に検出する。
+
+    対象は flow-checklist と同一（全6 SKILL.md ＋ 4テンプレート ＋ CLAUDE.md ＋ README.md）。
+    CLAUDE.md のみ `## 更新履歴` 以降を歴史的記録として除外する。
+
+    単語 `Workflow` そのものは禁止しない（禁止すると「Dynamic Workflows を使用しない」
+    という方針記述自体が検出され、検査が成立しない）。禁止語彙を字面として列挙せざるを
+    えない行（本検査自体の説明行）は、行内に許可マーカーを置くことで除外できる。
+    """
+    check_id = "no-workflow"
+    problems = []
+
+    targets = [repo.skill_md(s) for s in ALL_SKILLS]
+    targets += repo.template_paths()
+    targets += [repo.claude_md, repo.readme_md]
+
+    for path in targets:
+        text = repo.text(path)
+        loc = rel(repo.root, path)
+        lines = text.splitlines()
+        # CLAUDE.md は更新履歴節以降を除外（歴史的記録は据え置き）
+        limit = len(lines)
+        if path == repo.claude_md:
+            for i, line in enumerate(lines):
+                if line.strip() == HISTORY_HEADING:
+                    limit = i
+                    break
+        for lineno, line in enumerate(lines[:limit], 1):
+            if NO_WORKFLOW_ALLOW_MARKER in line:
+                continue
+            for pattern, label in NO_WORKFLOW_PATTERNS:
+                if pattern.search(line):
+                    problems.append(
+                        f"{loc}:{lineno}: Dynamic Workflows の API 名（{label}）が"
+                        f"再混入しています: {line.strip()}"
+                    )
+
+    if problems:
+        return CheckResult(
+            check_id, False,
+            "Dynamic Workflows のランタイム API 名が再混入しています",
+            "\n".join("    " + p for p in problems),
+        )
+    return CheckResult(
+        check_id, True,
+        "全6スキル・4テンプレート・CLAUDE.md・README.md に Dynamic Workflows の API 名の再混入なし",
+    )
+
+
 # 実行する検査関数の一覧（順序が出力順）。
 CHECKS = [
     check_frontmatter,
@@ -673,6 +746,7 @@ CHECKS = [
     check_env_json,
     check_template_ref,
     check_flow_checklist,
+    check_no_workflow,
 ]
 
 
