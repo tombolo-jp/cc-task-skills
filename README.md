@@ -50,7 +50,7 @@ git config core.hooksPath scripts/hooks
 
 コマンド実行後、`init.md`ファイルに要件を簡潔に入力してください。この段階では、まだ詳細な要件定義は不要です。
 
-**URL を指定した場合**（第2引数）: 指定 URL（Backlog / GitHub / Jira / 一般 Web ページ等）から **本文とコメントを改変せず全文転記**し、添付ファイルがあればサブディレクトリ `attachments/` に保存します。`init.md` の末尾には別セクションとして **要約** を付与します。
+**URL を指定した場合**（第2引数）: 指定 URL（Backlog / GitHub / Jira / 一般 Web ページ等）から **本文とコメントを改変せず全文転記**し、添付ファイルがあればサブディレクトリ `files/` に保存します。`init.md` の末尾には別セクションとして **要約** を付与します。
 
 - **取得方法**: 可能な限り **MCP を優先**し、利用できなければ **ブラウザ優先のフォールバック**（claude-in-chrome → chrome-devtools → Playwright → WebFetch）で取得します。取得手段が一つも利用できない場合は **エラー終了し、`init.md` は作成しません**。
 - **URL のクォート**: URL は `?` `&` `#` 等の特殊文字を含むため、**シングルクォートで囲むことを推奨**します（例: `'https://...'`）。シングルクォートは内部を一切展開しないため最も安全です。
@@ -199,7 +199,7 @@ git config core.hooksPath scripts/hooks
 ```
 .claude/tasks/{your-task-name}/
 ├── init.md         # 要件ヒアリング（URL 指定時は取得内容を転記）
-├── attachments/    # URL から取得した添付ファイル（添付がある場合のみ）
+├── files/          # URL から取得した添付ファイル（添付がある場合のみ）
 ├── req.md          # 要件定義
 ├── design.md       # 詳細設計 ＋ 実装タスク一覧 ＋ 工数見積もり
 ├── dev-result.md   # 開発完了報告書 ＋ レビュー指摘一覧 ＋ レビュー・修正ログ

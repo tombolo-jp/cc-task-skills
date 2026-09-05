@@ -162,10 +162,10 @@ Each task follows a standardized directory structure:
 - Creates `.claude/tasks/{task_name}/` directory structure
 - Creates init.md for capturing raw customer requests
 - Generates templated req.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
-- **URL argument (optional, 2nd positional)**: When a URL is provided (e.g., a Backlog/GitHub/Jira ticket or any web page), fetches the page and transcribes its **body and all comments verbatim** into init.md, saves any attachments to the `attachments/` subdirectory, and appends a **summary** section at the end of init.md
+- **URL argument (optional, 2nd positional)**: When a URL is provided (e.g., a Backlog/GitHub/Jira ticket or any web page), fetches the page and transcribes its **body and all comments verbatim** into init.md, saves any attachments to the `files/` subdirectory, and appends a **summary** section at the end of init.md
   - **Fetch method**: prefers MCP (service-specific MCP detected via ToolSearch by URL domain), falling back to a **browser-first chain** (claude-in-chrome → chrome-devtools → Playwright → WebFetch)
   - **No fetch method available**: returns an error and exits **without creating init.md or the task directory** (the fetch-method decision happens before `mkdir`)
-  - **Partial fetch**: if some content (attachments/comments) cannot be obtained due to the method's limits, processing continues and the missing items are explicitly noted inside init.md
+  - **Partial fetch**: if some content (files/comments) cannot be obtained due to the method's limits, processing continues and the missing items are explicitly noted inside init.md
   - **URL quoting**: single quotes are recommended (URLs contain `?`/`&`/`#`); the skill strips surrounding quotes if present
 - Note: design.md, dev-result.md, verify.md, verify-result.md are created by their respective skills (task-design, task-dev, task-verify)
 
