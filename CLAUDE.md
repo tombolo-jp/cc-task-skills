@@ -280,15 +280,31 @@ python3 scripts/measure_weight.py -v     # 識別子・重複の統計も表示
 
 ## Installation Method
 
-Skills are installed by copying the skill directories to the Claude Code skills directory:
-```bash
-cp -r cc-task-skills/skills/* ~/.claude/skills/
-```
+導入方法は2通りあり、**スキル定義はどちらでも無改変で動作しなければならない**。
+
+1. **プラグイン**（推奨。クラウドセッション対応）: リポジトリ直下がマーケットプレイス `tombolo-jp` 兼プラグイン `cc-task-skills` を兼ねる。
+2. **個人スキルへコピー**（従来どおり）:
+   ```bash
+   cp -r cc-task-skills/skills/* ~/.claude/skills/
+   ```
 
 > **開発・コントリビュート時**: スキル定義やドキュメントを編集する場合は、前述「整合性チェック」のローカルフックを有効化しておくと定型文のズレを早期に検出できる。
 > ```bash
 > git config core.hooksPath scripts/hooks
 > ```
+
+### プラグイン配布構成: 今後の改修で守る点
+
+`.claude-plugin/plugin.json` と `.claude-plugin/marketplace.json` は `scripts/check_consistency.py` の検査対象外である（9検査はいずれもハードコードされたファイル一覧のみを読み、ディレクトリ走査もグロブも行わない）。**機械的な担保が無いため、以下は規範として守ること。**
+
+- **`plugin.json` に `skills` フィールドを書かない。** `<プラグインルート>/skills` の自動検出は「`skills` が宣言されていないこと」を条件に行われる。宣言すると自動検出が無効化され、明示したパスだけが対象になる。`commands` / `agents` / `hooks` も同様。
+- **両 JSON のスキーマは strict であり、未定義キーの追加は検証エラーになる。** `plugin.json` で使えるメタ情報は `name`（必須）/ `version` / `description` / `author` / `homepage` / `repository` / `license` / `keywords` に限られる。`author` と `owner` は文字列ではなく `{name, email?, url?}` のオブジェクトである。
+- **`version` は両ファイルに書かない。** 更新はコミット SHA で判定させる方針のため、`claude plugin validate` が出す version 未指定の警告1件は**意図的に許容する**。この警告を消す目的で version を追加しないこと。
+- **スキル本文にインストール先依存の絶対パスを書かない。** 参照ファイル・テンプレートの解決は、ハーネスがスキル本文の先頭へ自動付加する `Base directory for this skill: <スキル自身のディレクトリの絶対パス>` からの相対解決を使う。この行は**個人スキル経路とプラグイン経路の両方で付加される**ため、現行の記述がそのまま両対応になっている。
+- **`${CLAUDE_PLUGIN_ROOT}` を使わない。** 展開されるのはプラグイン経路のみで、個人スキル経路では未展開の文字列がそのまま残る。なお `${CLAUDE_SKILL_DIR}` という変数は**存在しない**（代替にならない）。
+- **frontmatter の `name` はディレクトリ名と一致させ続ける**（`frontmatter` 検査が強制）。プラグイン経路のコマンド正式名は `cc-task-skills:<ディレクトリ名>` だが、短縮形 `/<name>` での起動はこの一致によって成立している。一致が崩れると短縮形が死に、スキル本文が案内する `/task-design` 等のコマンド名がすべて不正になる。
+- **ルートの `CLAUDE.md` は利用者のセッションへは読み込まれない**（`claude plugin validate` が明示的に警告する）。本ファイルは本リポジトリを編集するとき専用であり、利用者へ届けたい規範はスキル本文か `references/` に置くこと。
+- **スキルを追加・削除した場合は `marketplace.json` の説明文と README のスキル一覧も更新する。**
 
 ## Language Support
 

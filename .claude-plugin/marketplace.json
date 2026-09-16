@@ -1,0 +1,25 @@
+{
+  "name": "tombolo-jp",
+  "owner": {
+    "name": "Yuki Kokubo",
+    "url": "https://github.com/tombolo-jp"
+  },
+  "metadata": {
+    "description": "Yuki Kokubo が公開する Claude Code プラグインのマーケットプレイス"
+  },
+  "plugins": [
+    {
+      "name": "cc-task-skills",
+      "source": "./",
+      "description": "段階的な開発ワークフロー（要件定義→設計→実装→検証）を支援するタスク管理スキル集",
+      "category": "development",
+      "keywords": [
+        "workflow",
+        "task-management",
+        "requirements",
+        "design",
+        "review"
+      ]
+    }
+  ]
+}

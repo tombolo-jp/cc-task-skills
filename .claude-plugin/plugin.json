@@ -1,0 +1,18 @@
+{
+  "name": "cc-task-skills",
+  "description": "段階的な開発ワークフロー（要件定義→設計→実装→検証）を支援するタスク管理スキル集",
+  "author": {
+    "name": "Yuki Kokubo",
+    "url": "https://github.com/tombolo-jp"
+  },
+  "homepage": "https://github.com/tombolo-jp/cc-task-skills",
+  "repository": "https://github.com/tombolo-jp/cc-task-skills",
+  "license": "GPL-3.0",
+  "keywords": [
+    "workflow",
+    "task-management",
+    "requirements",
+    "design",
+    "review"
+  ]
+}

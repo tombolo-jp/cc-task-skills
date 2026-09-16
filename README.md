@@ -4,6 +4,74 @@ Claude Codeで段階的な開発ワークフローを支援するカスタムス
 
 ## インストール
 
+導入方法は2通りあります。**クラウドセッション（claude.ai/code 等）でも使いたい場合は方式Aを選んでください。** クラウドセッションは手元の `~/.claude/skills` を読まないため、方式Bではスキルが読み込まれません。
+
+| | 方式A: プラグイン | 方式B: 個人スキルへコピー |
+|---|---|---|
+| クラウドセッション | **利用可** | 利用不可 |
+| 更新 | `/plugin marketplace update` | 再コピー |
+| チームで共有 | リポジトリの `.claude/settings.json` で共有可 | 各自で手動コピー |
+
+> **両方を同時に導入しないでください。** 詳細は後述「[方式Aと方式Bの併用について](#方式aと方式bの併用について)」。
+
+### 方式A: プラグインとして導入（推奨）
+
+このリポジトリ自体がマーケットプレイス（`tombolo-jp`）兼プラグイン（`cc-task-skills`）になっています。
+
+**A-1. 手元の Claude Code に導入する**
+
+Claude Code 上で以下を実行します：
+```
+/plugin marketplace add tombolo-jp/cc-task-skills
+/plugin install cc-task-skills@tombolo-jp
+```
+
+**A-2. クラウドセッションで使う（利用側リポジトリに設定する）**
+
+スキルを使いたい**プロジェクト側**のリポジトリに `.claude/settings.json` を作成し、以下を記述してコミットします。クラウドセッションはこの設定を読んでプラグインを自動的に取得します：
+```json
+{
+  "extraKnownMarketplaces": {
+    "tombolo-jp": {
+      "source": {
+        "source": "github",
+        "repo": "tombolo-jp/cc-task-skills"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "cc-task-skills@tombolo-jp": true
+  }
+}
+```
+
+この設定はリポジトリにコミットされるため、同じリポジトリで作業するメンバー全員に同じスキルが行き渡ります。
+
+**A-3. スキルの呼び出し名**
+
+プラグイン経由で導入した場合、正式名は `/cc-task-skills:<スキル名>` 形式になります：
+```
+/cc-task-skills:task-init your-task-name
+/cc-task-skills:task-dev your-task-name
+```
+
+ただし本リポジトリの各スキルは frontmatter の `name` をディレクトリ名と一致させているため、**他に同名のコマンドが無ければ短縮形も動作します**：
+```
+/task-init your-task-name
+/task-dev your-task-name
+```
+
+本 README の以降の記述と、スキルが実行中に案内するコマンド名（例: 「`/task-design` へ進めます」）はすべて短縮形で表記しています。短縮形が他のコマンドと衝突する場合は `/cc-task-skills:` を前置してください。
+
+**A-4. 更新する**
+
+プラグインはバージョン番号を持たず、コミット SHA で更新が判定されます。最新化するには：
+```
+/plugin marketplace update tombolo-jp
+```
+
+### 方式B: 個人スキルとしてコピー（従来どおり）
+
 1. このリポジトリをクローンします：
 ```bash
 git clone https://github.com/tombolo-jp/cc-task-skills.git
@@ -13,6 +81,20 @@ git clone https://github.com/tombolo-jp/cc-task-skills.git
 ```bash
 cp -r cc-task-skills/skills/* ~/.claude/skills/
 ```
+
+### 方式Aと方式Bの併用について
+
+**同一環境で方式Aと方式Bを併用しないでください。** 両方を導入すると `task-dev` などの短縮名を持つコマンドが二重に登録され、Claude Code は**先に見つかった方を警告なしに採用**します。どちらが起動したかは表示されないため、片方だけを更新した場合に古い定義が黙って使われ続けることがあります。
+
+方式Aへ移行する場合は、先に個人スキル側を削除してください：
+```bash
+rm -rf ~/.claude/skills/task-init ~/.claude/skills/task-req ~/.claude/skills/task-req-update \
+       ~/.claude/skills/task-design ~/.claude/skills/task-dev ~/.claude/skills/task-verify
+```
+
+### 共通の設定
+
+以下はどちらの方式でも共通です。
 
 3. （推奨）進捗管理用 Task ツールを有効化します。`~/.claude/settings.json` に以下を追加してください：
 ```json
@@ -32,6 +114,16 @@ cp -r cc-task-skills/skills/* ~/.claude/skills/
 git config core.hooksPath scripts/hooks
 ```
 スキル定義やドキュメントの定型文のズレをコミット時に自動検出できます（詳細は後述「整合性チェック」）。
+
+### クラウドセッションでの注意点
+
+方式Aでクラウドセッションから利用する場合、以下はスキル定義上の仕様です。
+
+- **`/task-init` の URL 取得はツールの有無に依存します。** サービス別 MCP（Backlog / GitHub / Jira 等）→ claude-in-chrome → Chrome DevTools MCP → `playwright-cli` スキル → `WebFetch` の順に探索し、**最初に見つかったものを採用**します。
+- **取得手段が1つも見つからない場合、タスクディレクトリも `init.md` も作成せずにエラー終了します。** 中途半端な状態は残りません。この場合は URL を使わず `/task-init <task_name>` で初期化し、依頼内容を手動で `init.md` に貼り付けてください。
+- **`playwright-cli` スキルは本プラグインに含まれません。** 別途利用可能になっていない環境では、この段は発火せず次の候補へ進みます。
+- **`WebFetch` 経由ではバイナリを取得できません。** 添付ファイルは保存されず、`init.md` の「取得できなかった項目」セクションに記録されます。本文とコメントの転記は行われます。
+- **タスクファイルの作成先はプロジェクトルート配下の `.claude/tasks/` です。** クラウドセッションのコンテナは破棄されるため、成果物を残すには**コミットが必要**です（`/task-verify` はコミットを行いません）。
 
 ## 使用方法
 
