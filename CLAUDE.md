@@ -49,7 +49,7 @@ Each skill is a directory under `skills/` containing a `SKILL.md` file and optio
 - `--team`（Agent Teams）成立時も、チームリードが自身の Task 一覧で全フェーズを追跡する。チームメイトへ委任した作業は `Agent` の戻り値で完了を確認してから `completed` へ遷移させる。
 - 今後スキルを追加・変更する際も、多段フローを持つスキルにはこの原則を適用すること。
 
-> **Task ツールの提供はモデル依存でゲートされる。** Claude Code 2.1.233 以降、しきい値以上のモデルでは進捗管理用の4ツールが既定で無効である。主経路を実際に通すには `~/.claude/settings.json` へ `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` が必要（README.md「インストール」手順3と同一内容）。リモートフラグはロールアウト状況で変わりうるため、**ステップ0 の2方式分岐は今後も維持すること**。判定ロジックの実測結果・本原則の改訂履歴は [`docs/design-principles.md`](docs/design-principles.md) にある。なおこの env 変数は Agent Teams の `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` とは**無関係**である。
+> **Task ツールの提供はモデル依存でゲートされる。** Claude Code 2.1.233 以降、しきい値以上のモデルでは進捗管理用の4ツールが既定で無効である。主経路を実際に通すには `~/.claude/settings.json` へ `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` が必要（README.md「インストール」の「共通の設定」と同一内容）。リモートフラグはロールアウト状況で変わりうるため、**ステップ0 の2方式分岐は今後も維持すること**。判定ロジックの実測結果・本原則の改訂履歴は [`docs/design-principles.md`](docs/design-principles.md) にある。なおこの env 変数は Agent Teams の `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` とは**無関係**である。
 
 この原則の各スキルへの反映状況と整合性は、`scripts/check_consistency.py`（後述「整合性チェック」）で機械的に検証する。
 
