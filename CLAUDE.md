@@ -205,6 +205,7 @@ Each task follows a standardized directory structure:
 - Reads report template from `templates/dev-result-template.md`
 - Implements tasks sequentially following the design's implementation task list (`T-nnn`)
 - Maintains code quality, follows existing patterns, includes appropriate tests
+- **Code comment policy (implementation *and* fix phases)**: comments record only what cannot be recovered from the code itself — non-obvious constraints, external-spec references, worked-around defects, deliberate limits and their release conditions. Explanations of *what* the code does, restatements of names, and decorative section banners are prohibited. **Density is capped at the containing file's existing level** (an application of 既存コード尊重, not an absolute line rule). The policy is embedded **verbatim** into the implement and fix delegation prompts, because subagents inherit no context. Crucially, **writing a defense aimed at the reviewer is forbidden**: review isolation deliberately withholds implementation intent (`RI-2`), which creates pressure to smuggle that intent into comments — the intent's destination is `dev-result.md`. Review perspective ④ flags redundant comments as `maintainability`, which stays 推奨 (never auto-fixed), because preventing them at write time is cheaper than deleting them at review time
 - Reports progress after each task completion
 - Creates dev-result.md with implementation overview, changed files, technical details, and completion report
 - **Input resolution (5 branches)**: design.md missing → skip; design.md with §12 and no todo.md → proceed on design.md alone; design.md **without** §12 and no todo.md → **append `## 12. 実装タスク一覧` to design.md first** (announced to the user, never silently), then implement; when todo.md exists it is **always read together with design.md**, and design.md wins on conflict. Progress tasks are registered as `[T-nnn]` for design-derived items and `[todo i/N]` for todo.md-derived ones
@@ -416,6 +417,7 @@ The skills support Japanese language for requirements definition and design docu
 
 - **Staged Development**: Sequential progression through requirements → design (with task breakdown and estimation) → implementation (with the review → fix → re-review loop) → verification
 - **Quality Focus**: Emphasizes code quality, maintainability, and integration with existing systems
+- **Minimal Commentary**: Generated code carries only comments that cannot be recovered by reading the code; comment density is capped at the surrounding file's existing level, and implementation intent is recorded in `dev-result.md` rather than defended in comments
 - **Structural Isolation of Review**: The agent that wrote the code never judges it from its own context; review is delegated to a separate context and the implementer's own account is not passed along
 - **Progress Tracking**: Concrete todo lists for work management
 - **Consistency**: Respects existing code patterns and conventions
