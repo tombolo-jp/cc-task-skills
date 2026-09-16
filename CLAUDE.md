@@ -28,7 +28,7 @@ This repository contains a collection of custom skills for Claude Code that impl
 The repository contains 6 interconnected skills that work together (only task-init is excluded from `--team` option support):
 
 1. **task-design** - Analyzes existing systems and creates technical design, **then breaks it down into an implementation task list (`T-nnn`) with effort estimation in the same run**. Supports `--team` option.
-2. **task-dev** - Executes implementation based on the design's implementation task list, **then automatically runs a review → fix → re-review closed loop (max 2 rounds; the 2nd round runs only when must-fix findings remain) inside the same invocation**, and creates the development report. Review is **always delegated to a separate-context subagent** (regardless of `--team`) so that the agent which wrote the code never judges it from its own context; fixing is always single-agent. Review findings, the loop log, and the exit summary are **appended to `dev-result.md`** (no separate review/fix report files). Supports `--team` option (**review phase only** — 1 reviewer without it, 3 in parallel with it). **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
+2. **task-dev** - Creates (or reuses) a branch named after the task, executes implementation based on the design's implementation task list, **then automatically runs a review → fix → re-review closed loop (max 2 rounds; the 2nd round runs only when must-fix findings remain) inside the same invocation**, creates the development report, and finally commits (and, when enabled, pushes) the result. Review is **always delegated to a separate-context subagent** (regardless of `--team`) so that the agent which wrote the code never judges it from its own context; fixing is always single-agent. Review findings, the loop log, and the exit summary are **appended to `dev-result.md`** (no separate review/fix report files). Supports `--team` option (**review phase only** — 1 reviewer without it, 3 in parallel with it). **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
 3. **task-init** - Creates task environment and requirements gathering. Optionally fetches task content from a URL into init.md. (No `--team` support)
 4. **task-req** - Creates requirements draft from raw customer requests. Supports `--team` option.
 5. **task-req-update** - Reflects user answers to the "要確認事項" (open questions) section back into req.md and consolidates it into a finalized version. Supports `--team` option.
@@ -67,7 +67,7 @@ Each skill is a directory under `skills/` containing a `SKILL.md` file and optio
 **分量の大きい定型文・規約は SKILL.md 本体に置かず、`skills/<skill>/references/*.md` へ切り出し、そのフェーズに着手する時点で Read する。** SKILL.md 本体には「いつ読むか」を指す数行のポインタだけを残す。
 
 - **常時ロードされる行数がスキルの実効的なコストである。** 指定していないオプション（`--team`）の規約や、まだ到達していないフェーズ（レビュー委譲の戻り値契約）を実装中のコンテキストへ載せることは、変更が触れる実コードを読むために使えたはずの予算を先に消費する。読解を削らずに仕様の常駐量を削るのが本原則である。
-- **切り出す単位はフェーズ境界と一致させる。** 現行の3ファイルは、`agent-teams.md`（`--team` 指定時のみ）・`phase-tracking.md`（ステップ0 で必ず）・`task-dev` の `review-contract.md`（レビュー・修正フェーズ着手直前。複数タスクモードでは実装委譲の直前にも）である。フェーズ境界と無関係な分割は、読み込み忘れを招くため行わない。
+- **切り出す単位はフェーズ境界と一致させる。** 現行の4ファイルは、`agent-teams.md`（`--team` 指定時のみ）・`phase-tracking.md`（ステップ0 で必ず）・`task-dev` の `review-contract.md`（レビュー・修正フェーズ着手直前。複数タスクモードでは実装委譲の直前にも）・`task-dev` の `git-ops.md`（ステップG＝git 前提の確定の着手時。両モードで必ず）である。フェーズ境界と無関係な分割は、読み込み忘れを招くため行わない。
 - **「読まれない参照」は規約の消失と同じである。** 本体から切り出した以上、参照が消えればその規約は永久に読まれない。`scripts/check_consistency.py` の `reference-file` 検査が、実在・スキル間の sha256 一致・**SKILL.md 本文からの参照の存在**の3点を機械的に担保する。
 - **重複配置は維持する。** 参照ファイルはスキルごとに同一内容で置く（`skills/*` をそのままコピーする既存のインストール手順を変えないため、および skills ルートへ SKILL.md を持たないディレクトリを作らないため）。重複そのものは従来どおり許容し、ズレは検査が担保する。
 - **逐語ブロックは要約して本体へ戻さない。** 委譲プロンプトの逐語ブロック（`review-contract.md` の 5-6-2）を記憶や要約から再構成すると、隔離規約と却下監査が「構造」から「指示」へ退化する。参照ファイルを読まずに委譲することを禁止事項とする。
@@ -104,6 +104,19 @@ Each skill is a directory under `skills/` containing a `SKILL.md` file and optio
 - **収束は品質を意味しない。** 指摘が0件になったことを品質の証明として扱わない。本当の合否判定は動的検証（`task-verify`）が持つ。
 - **同一モデルの盲点は隔離しても共有される。** 本原則が防げるのは一貫性バイアスのみであり、モデル固有の知識欠落は防げない。これは設計上の受容事項として利用者へも案内する。
 
+## 設計原則: git 操作は設定で明示された範囲だけ行う
+
+`task-dev` は**タスク名からブランチを作成し、コミットし、設定と実行環境に応じて push する**。これは「本スキル群は遠隔操作とブランチ操作を行わない」という従来の禁止を、**無効化ではなく条件付き許可へ置き換える**変更である（論証・実測・改訂履歴は [`docs/design-principles.md`](docs/design-principles.md)）。規約の逐語本文は `skills/task-dev/references/git-ops.md`（`GB-1`〜`GB-23`）が持ち、**ステップG の着手時にのみ読み込む**。
+
+- **ブランチ作成は `task-dev` に置き、`task-init` / `task-design` には置かない。** `task-design` は工数見積もりを兼ねており、**見積もりだけ提出して実装に着手しないケースが常態的にある**。ブランチは「実装に着手した」という事実に結び付けるべきであり、その事実が確定するのは `task-dev` の実行時である。結果として要件定義・設計の成果物は起点ブランチ側に残り、実装のみが `feature/<task>` に載る。**この分裂は許容する**。
+- **制御はプロジェクト単位の設定ファイル2層（`.claude/task-skills.local.json` → `.claude/task-skills.json`）だけで行い、利用者向けの環境変数は設けない。** マージはキー単位。**設定に明示されたキーは、実行環境の判別よりも常に優先される**（判別結果が設定を上書きすることは一切ない）。スキルは設定ファイルを**書き換えない**。
+- **`push` の既定値だけは実行環境の判別から決め、判別は3値（クラウド / ローカル / 判別不能）とする。2値へ丸めない。** 判別に使う環境変数は公開仕様ではないため、**判別不能なら push せず、未 push のコミットが残ることを警告する**。将来その信号が廃止されても「黙って成果が消える」ではなく「警告が出て手動 push を促される」へ劣化する。**この劣化の方向性を壊す変更を加えないこと。**
+- **破壊的・不可逆な操作の禁止は維持する。** force push（`--force` / `--force-with-lease`）・`git reset` / `git checkout -- <path>` / `git restore` / `git clean`・`git rebase` / `git merge` / `git tag` / `git config`・履歴の書き換え・**決定した1ブランチ以外への push** は引き続き禁止である。既存ブランチを再利用する際に**起点ブランチを自動マージしない**のも同じ理由（衝突解決という重い判断を暗黙に持ち込まないため）。
+- **サブエージェントの git 禁止事項は一切緩めない。** ブランチ作成・コミット・push は**すべてメイン会話の責務**であり、実装・レビュー・修正の委譲先は従来どおり git の状態を変更しない。
+- **コミットしてよい3経路（`C-11a` / `C-11b-1` / `C-11b-2`）は両モード共通である。** 単一タスクモードがコミットするようになっても、**未解消の修正必須を残したままコミットしない**という原則は変わらない。「レビュー済みという記録つきで欠陥がコミットされること」を防ぐのが本スキルの目的そのものであるためである。
+- **複数タスクモードでは自動ブランチ作成を行わない**（`task1,task2,task3` は1つのブランチ名に対応しない）。警告のうえ起動時のブランチへタスクごとにコミットする。`commit` / `push` の設定は有効である。
+- **黙って分岐しない。** 実際に使うブランチ名・起点・コミットと push の有無・その判断根拠を、**作業開始前に必ず表示する**。`CLAUDE_CODE_BASE_REF`（セッションの指定ブランチ）が取得でき、作成するブランチと異なる場合は、推測ではなくその値を明示して報告する。
+
 ## Task Management Structure
 
 Each task follows a standardized directory structure:
@@ -118,6 +131,15 @@ Each task follows a standardized directory structure:
 ```
 
 **Important**: Task files are always created under the **project root's** `.claude/tasks/`, not `~/.claude/tasks/`. Each skill resolves the project root via `pwd` at the beginning of execution and uses absolute paths for all file operations.
+
+`task-dev` additionally reads a **project-level settings file** (never per task, never created or rewritten by the skills):
+
+```
+.claude/task-skills.local.json   # 個人の環境ごとの設定（最優先。.gitignore への登録を推奨）
+.claude/task-skills.json         # コミットして共有する、チーム共通の設定
+```
+
+Keys are `branch.create` / `branch.prefix` / `commit` / `push`, merged **key by key** with the local layer winning. `push` alone falls back to a 3-valued execution-environment detection when no layer declares it. 規約の正本は `skills/task-dev/references/git-ops.md`（`GB-1`〜`GB-23`）である。
 
 > **Backward compatibility**: tasks created with older versions of these skills also contain a `todo.md`. `task-dev` still reads it whenever it exists; design.md takes precedence when the two disagree.
 
@@ -173,7 +195,7 @@ Each task follows a standardized directory structure:
 
 ## Key Skill Behaviors
 
-> **フロー強制（全スキル共通）**: 6スキルすべてが「手順」冒頭の **ステップ0** で `references/phase-tracking.md`（共通の判定手順）を読み込んだうえで、自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は単一タスクモードで12フェーズ（`--team` 非依存）、複数タスクモードで7フェーズを登録し、加えて実行時に design.md の実装タスク一覧（`T-nnn`。todo.md が存在する場合はその項目も）を Task として動的登録して1件ずつ着手・完了を明示し、さらにレビューパス1周ごとに `[review pass i/3]`（修正必須があれば `[fix pass i/3]` も）を動的追加する（パス内の個別 `R-nnn` は Task 化しない）。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify** は既定モードで18フェーズ（`--manual` は7、`--run-only` は12）を登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
+> **フロー強制（全スキル共通）**: 6スキルすべてが「手順」冒頭の **ステップ0** で `references/phase-tracking.md`（共通の判定手順）を読み込んだうえで、自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は単一タスクモードで14フェーズ（`--team` 非依存）、複数タスクモードで8フェーズを登録し、加えて実行時に design.md の実装タスク一覧（`T-nnn`。todo.md が存在する場合はその項目も）を Task として動的登録して1件ずつ着手・完了を明示し、さらにレビューパス1周ごとに `[review pass i/3]`（修正必須があれば `[fix pass i/3]` も）を動的追加する（パス内の個別 `R-nnn` は Task 化しない）。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify** は既定モードで18フェーズ（`--manual` は7、`--run-only` は12）を登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
 
 各スキルの引数・分岐・終了条件・記録要件の詳細は **[`docs/skill-behaviors.md`](docs/skill-behaviors.md)** にある（正本は各 `skills/<skill>/SKILL.md`）。
 
@@ -183,7 +205,7 @@ Each task follows a standardized directory structure:
 | `task-req` | `/task-req {task_name} [--team]` | init.md から req.md を起こす。末尾の「要確認事項」は**回答で設計・実装の分岐が変わる問いだけ**に絞る（包含が先・除外語彙 `X-1`〜`X-6`・判定不能は残す）。0件なら節ごと出力しない |
 | `task-req-update` | `/task-req-update {task_name} [--team]` | 「要確認事項」への回答を本文へ反映し確定版へ整理。未解決項目は残し、全解決で節を削除。冪等（回答 → 再実行のループ） |
 | `task-design` | `/task-design {task_name} [--team]` | §1〜§11 の設計 ＋ §12 実装タスク一覧（`T-nnn`）＋ §13 工数見積もりを1回で完結。**設計確定線**より上は見積もり中 read-only。行数 ÷ 実装時間 < 30 行/h の見積もりは差し戻し（上限2周） |
-| `task-dev` | `/task-dev {task_name}[,...] [--team]` | `T-nnn` 順に実装し、続けて**レビュー → 修正 → 再レビューを最大2周**（レビューは常に別コンテキストへ委譲）。**権限の切替線**の手前と奥で書き込み権限が変わる。カンマ区切りで複数タスクを逐次実装しタスクごとにコミット |
+| `task-dev` | `/task-dev {task_name}[,...] [--team]` | **ステップG** で設定を解決し `feature/<task_name>` を作成・切替（既定）。`T-nnn` 順に実装し、続けて**レビュー → 修正 → 再レビューを最大2周**（レビューは常に別コンテキストへ委譲）。**権限の切替線**の手前と奥で書き込み権限が変わる。**ステップC** でコミットし、`push` が真なら `git push -u origin <branch>`（force push は行わない）。カンマ区切りで複数タスクを逐次実装しタスクごとにコミット（この場合ブランチは作成しない） |
 | `task-verify` | `/task-verify {task_name} [--manual] [--run-only] [--team]` | 検証手順書を生成し、既定では**そのまま自動実行**（上限5周）。`--manual` は人間向け簡潔版の生成のみ、`--run-only` は実行のみ。**コミットは一切しない** |
 
 ## Agent Teams オプション
@@ -316,6 +338,7 @@ The skills support Japanese language for requirements definition and design docu
 - **Quality Focus**: Emphasizes code quality, maintainability, and integration with existing systems
 - **Minimal Commentary**: Generated code carries only comments that cannot be recovered by reading the code; comment density is capped at the surrounding file's existing level, and implementation intent is recorded in `dev-result.md` rather than defended in comments
 - **Structural Isolation of Review**: The agent that wrote the code never judges it from its own context; review is delegated to a separate context and the implementer's own account is not passed along
+- **Task-named Branches**: implementation lands on `feature/<task_name>`, created at the moment implementation actually starts (`task-dev`), never earlier; commits and pushes are controlled by a project-level settings file, and the detection that decides the `push` default degrades toward *warning the user*, never toward a silent push or a silent loss
 - **Progress Tracking**: Concrete todo lists for work management
 - **Consistency**: Respects existing code patterns and conventions
 
