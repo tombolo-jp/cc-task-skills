@@ -298,6 +298,15 @@ bash scripts/test/run_consistency_tests.sh  # 検査自体の回帰テスト
 
 - **ローカルフック**: `git config core.hooksPath scripts/hooks` で pre-commit フックを有効化すると、対象ファイル変更時に自動でチェックが走ります（対象外の変更は高速スキップ、緊急時は `git commit --no-verify` でバイパス可能）。整合性チェックはこのローカルフックで担保します（GitHub Actions による CI は使用していません）。
 
+## 分量の計測
+
+`scripts/measure_weight.py` は、スキル1回の実行で**常時ロードされる行数**と、**該当フェーズに入って初めて読み込まれる行数**を分けて表示します。合否判定は持たず、常に exit 0 で終了します。
+
+```bash
+python3 scripts/measure_weight.py        # スキル別の内訳
+python3 scripts/measure_weight.py -v     # 識別子・重複の統計も表示
+```
+
 ## ライセンス
 
 GPL-3.0 License
