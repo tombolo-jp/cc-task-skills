@@ -52,6 +52,15 @@ LOCAL_REFERENCES = {
     "task-dev": ["review-contract.md"],     # レビュー・修正フェーズ着手直前に読む
 }
 
+# docs/ 配下の解説文書。CLAUDE.md から切り出した論証・運用詳細・スキル別仕様を持つ。
+# 規範の正本は CLAUDE.md / SKILL.md 側だが、廃止済み名称・Dynamic Workflows の API 名が
+# ここへ復活すると、切り出し先が抜け道になるため走査対象に含める。
+DOC_FILES = [
+    "docs/skill-behaviors.md",
+    "docs/agent-teams.md",
+    "docs/design-principles.md",
+]
+
 # テンプレートを持つスキルと、そのテンプレートファイル名（meta-format / template-ref 検査対象）。
 # 値はリスト: 1スキルが複数テンプレートを持ちうる（task-verify は生成用と実行結果用の2件）。
 TEMPLATE_FILES = {
@@ -233,6 +242,10 @@ class Repo:
     def template_paths(self):
         """TEMPLATE_FILES 全件を平坦化した Path のリスト（宣言順）。"""
         return [p for skill in TEMPLATE_FILES for p in self.template_mds(skill)]
+
+    def doc_paths(self):
+        """docs/ 配下の解説文書の Path を宣言順に返す。"""
+        return [self.root / name for name in DOC_FILES]
 
     @property
     def claude_md(self):
@@ -661,6 +674,7 @@ def check_flow_checklist(repo):
     targets = [repo.skill_md(s) for s in ALL_SKILLS]
     targets += repo.reference_paths()
     targets += repo.template_paths()
+    targets += repo.doc_paths()
     targets += [repo.claude_md, repo.readme_md]
 
     for path in targets:
@@ -730,6 +744,7 @@ def check_no_workflow(repo):
     targets = [repo.skill_md(s) for s in ALL_SKILLS]
     targets += repo.reference_paths()
     targets += repo.template_paths()
+    targets += repo.doc_paths()
     targets += [repo.claude_md, repo.readme_md]
 
     for path in targets:

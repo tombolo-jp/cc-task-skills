@@ -33,8 +33,10 @@ trap cleanup EXIT
 # 正常リポジトリのスナップショットを作る（.git は除外し git 解決を切る → --root 明示）。
 SNAPSHOT="${WORKDIR}/snapshot"
 mkdir -p "${SNAPSHOT}"
-# 検査対象（skills / CLAUDE.md / README.md）のみコピー。
+# 検査対象（skills / docs / CLAUDE.md / README.md）のみコピー。
+# skills/ 配下には SKILL.md のほか references/ と templates/ が含まれる。
 cp -R "${REPO_ROOT}/skills" "${SNAPSHOT}/skills"
+cp -R "${REPO_ROOT}/docs" "${SNAPSHOT}/docs"
 cp "${REPO_ROOT}/CLAUDE.md" "${SNAPSHOT}/CLAUDE.md"
 cp "${REPO_ROOT}/README.md" "${SNAPSHOT}/README.md"
 
@@ -534,6 +536,19 @@ run_case "reference-file 異常（SKILL.md からの参照喪失）→ exit 1" "
 F="$(make_fixture reference-file-missing)"
 rm -f "${F}/skills/task-verify/references/phase-tracking.md"
 run_case "実行エラー（参照ファイル実体の欠落）→ exit 2" "${F}" 2 ""
+
+# ---------------------------------------------------------------------------
+# (26) flow-checklist: docs/ 配下へ廃止済み起動名を再混入させる
+#      CLAUDE.md から切り出した解説文書が、廃止済み名称の抜け道にならないことを確認する。
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-docs)"
+/usr/bin/python3 - "${F}/docs/skill-behaviors.md" <<'DOC'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t + "\n（旧導線: `/task-review <task_name>`）\n")
+DOC
+run_case "flow-checklist 異常（docs へ廃止起動名の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # 集計
