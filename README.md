@@ -282,11 +282,13 @@ Agent Teams はトークン消費が大幅に増加します（通常の2〜5倍
 
 ## 整合性チェック
 
-このスキル集は include 機構を持たないため、Agent Teams 共通ブロックやフォールバック文言などの定型文が複数のファイルに重複しています。`scripts/check_consistency.py`（Python 3 標準ライブラリのみ）は、これらの重複箇所のズレを機械的に検出します。
+このスキル集は複数ファイルに同一の定型文を持ちます。`scripts/check_consistency.py`（Python 3 標準ライブラリのみ）は、これらのズレを機械的に検出します。
+
+定型文のうち**分量の大きいもの**は、各スキルの `references/` 配下へ切り出してあります（`agent-teams.md` = `--team` 指定時のみ / `phase-tracking.md` = ステップ0 / `task-dev` の `review-contract.md` = レビュー・修正フェーズ着手直前）。**必要なフェーズに入って初めて読み込まれる**ため、指定していないオプションの規約がコンテキストを占有しません。参照ファイルはスキルをまたいで同一内容で置かれており、その一致は `reference-file` 検査が sha256 で担保します。
 
 ```bash
 python3 scripts/check_consistency.py        # 不一致のみ表示
-python3 scripts/check_consistency.py -v     # 全8検査の結果を表示
+python3 scripts/check_consistency.py -v     # 全9検査の結果を表示
 bash scripts/test/run_consistency_tests.sh  # 検査自体の回帰テスト
 ```
 

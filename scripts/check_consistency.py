@@ -41,6 +41,17 @@ CANONICAL_SKILL = "task-dev"
 # 全6スキル（frontmatter 検査対象）。
 ALL_SKILLS = ["task-init"] + TEAM_SKILLS
 
+# 参照ファイル（progressive disclosure）。SKILL.md 本体からフェーズ着手時にのみ読み込まれる。
+# SHARED_REFERENCES: 複数スキルに同一内容で置かれる参照ファイル → reference-file 検査で sha256 一致を要求。
+# LOCAL_REFERENCES: 1スキルにのみ存在する参照ファイル → 実在と参照のみ検査。
+SHARED_REFERENCES = {
+    "agent-teams.md": TEAM_SKILLS,          # --team 指定時にのみ読む
+    "phase-tracking.md": ["task-init"] + TEAM_SKILLS,  # ステップ0 で必ず読む
+}
+LOCAL_REFERENCES = {
+    "task-dev": ["review-contract.md"],     # レビュー・修正フェーズ着手直前に読む
+}
+
 # テンプレートを持つスキルと、そのテンプレートファイル名（meta-format / template-ref 検査対象）。
 # 値はリスト: 1スキルが複数テンプレートを持ちうる（task-verify は生成用と実行結果用の2件）。
 TEMPLATE_FILES = {
@@ -201,6 +212,18 @@ class Repo:
 
     def skill_md(self, skill):
         return self.root / "skills" / skill / "SKILL.md"
+
+    def reference_md(self, skill, name):
+        return self.root / "skills" / skill / "references" / name
+
+    def reference_paths(self):
+        """全参照ファイルの Path を宣言順に平坦化して返す。"""
+        paths = []
+        for name, skills in SHARED_REFERENCES.items():
+            paths += [self.reference_md(sk, name) for sk in skills]
+        for skill, names in LOCAL_REFERENCES.items():
+            paths += [self.reference_md(skill, n) for n in names]
+        return paths
 
     def template_mds(self, skill):
         """1スキルが持つ全テンプレートの Path をリストで返す。"""
@@ -430,9 +453,12 @@ def _extract_blockquote_messages(text):
 def check_fallback_msg(repo):
     """[fallback-msg] フォールバック文言②が CLAUDE.md と SKILL.md で整形差を除いて一致するか。
 
-    CLAUDE.md は鉤括弧地の文、SKILL.md は `> ⚠️` blockquote。normalize_msg で整形差を吸収。
+    CLAUDE.md は鉤括弧地の文、スキル側は `> ⚠️` blockquote。normalize_msg で整形差を吸収。
     env 変数ハードゲート撤廃に伴い文言①（環境変数設定依頼）は廃止され、照合は文言②
     （チームメイト起動不可）のみとする。task-init の URL 用文言は別物なので照合対象から除外。
+
+    2026-09-16 の参照ファイル化以降、フォールバック文言は SKILL.md 本体ではなく
+    `references/agent-teams.md`（`--team` 指定時にのみ読み込まれる）に置かれる。
     """
     check_id = "fallback-msg"
     claude_text = repo.text(repo.claude_md)
@@ -454,9 +480,9 @@ def check_fallback_msg(repo):
     if msg_tool is None:
         problems.append("CLAUDE.md にフォールバック文言②（チームメイト起動不可）が見つかりません")
     else:
-        # 各 Agent Teams 対応 SKILL.md の blockquote と照合
+        # 各 Agent Teams 参照ファイルの blockquote と照合
         for skill in TEAM_SKILLS:
-            path = repo.skill_md(skill)
+            path = repo.reference_md(skill, "agent-teams.md")
             text = repo.text(path)
             loc = rel(repo.root, path)
             skill_msgs = _extract_blockquote_messages(text)
@@ -473,7 +499,7 @@ def check_fallback_msg(repo):
         )
     return CheckResult(
         check_id, True,
-        "フォールバック文言②が CLAUDE.md と5スキル SKILL.md で一致（整形差正規化後）",
+        "フォールバック文言②が CLAUDE.md と5スキルの references/agent-teams.md で一致（整形差正規化後）",
     )
 
 
@@ -633,6 +659,7 @@ def check_flow_checklist(repo):
 
     # --- 目的1: 廃止済みツール名の残存検出 ---
     targets = [repo.skill_md(s) for s in ALL_SKILLS]
+    targets += repo.reference_paths()
     targets += repo.template_paths()
     targets += [repo.claude_md, repo.readme_md]
 
@@ -701,6 +728,7 @@ def check_no_workflow(repo):
     problems = []
 
     targets = [repo.skill_md(s) for s in ALL_SKILLS]
+    targets += repo.reference_paths()
     targets += repo.template_paths()
     targets += [repo.claude_md, repo.readme_md]
 
@@ -733,14 +761,97 @@ def check_no_workflow(repo):
         )
     return CheckResult(
         check_id, True,
-        "全6スキル・4テンプレート・CLAUDE.md・README.md に Dynamic Workflows の API 名の再混入なし",
+        "全6スキル・参照ファイル・4テンプレート・CLAUDE.md・README.md に Dynamic Workflows の API 名の再混入なし",
     )
 
 
 # 実行する検査関数の一覧（順序が出力順）。
+def check_reference_file(repo):
+    """[reference-file] 参照ファイル（progressive disclosure）の実在・同一性・参照の検査。
+
+    SKILL.md 本体から切り出した定型文は、フェーズ着手時にのみ読み込む参照ファイルに置く。
+    include 機構が無いため複数スキルへ同一内容を配置する構成は維持し、ズレを本検査で担保する。
+
+    - 実在: SHARED_REFERENCES / LOCAL_REFERENCES の全ファイルが存在すること。
+    - 同一性: SHARED_REFERENCES は正準スキル（task-dev、無ければ宣言順の先頭）と sha256 一致すること。
+    - 参照: 各 SKILL.md 本文が `references/<name>` を相対パスで参照していること
+      （参照を失うと、本体から切り出した規約が永久に読まれなくなる）。
+    - 絶対パス: `~/.claude/skills/.../references/` のハードコード再混入がないこと。
+    """
+    check_id = "reference-file"
+    problems = []
+    hardcode_re = re.compile(r"~/\.claude/skills/[^\s`]*references/")
+
+    # --- 実在と同一性 ---
+    for name, skills in SHARED_REFERENCES.items():
+        canon_skill = CANONICAL_SKILL if CANONICAL_SKILL in skills else skills[0]
+        canon_path = repo.reference_md(canon_skill, name)
+        if not canon_path.is_file():
+            problems.append(f"正準 {rel(repo.root, canon_path)} が存在しません")
+            continue
+        canon_text = repo.text(canon_path)
+        canon_hash = hashlib.sha256(canon_text.encode("utf-8")).hexdigest()
+        for skill in skills:
+            path = repo.reference_md(skill, name)
+            if skill == canon_skill:
+                continue
+            if not path.is_file():
+                problems.append(f"{rel(repo.root, path)} が存在しません")
+                continue
+            text = repo.text(path)
+            if hashlib.sha256(text.encode("utf-8")).hexdigest() != canon_hash:
+                problems.append(
+                    f"{rel(repo.root, path)} が正準（{rel(repo.root, canon_path)}）と一致しません\n"
+                    + make_diff(canon_text, text, rel(repo.root, canon_path), rel(repo.root, path))
+                )
+
+    for skill, names in LOCAL_REFERENCES.items():
+        for name in names:
+            path = repo.reference_md(skill, name)
+            if not path.is_file():
+                problems.append(f"{rel(repo.root, path)} が存在しません")
+
+    # --- SKILL.md 本文からの参照 ---
+    expected = {}
+    for name, skills in SHARED_REFERENCES.items():
+        for skill in skills:
+            expected.setdefault(skill, []).append(name)
+    for skill, names in LOCAL_REFERENCES.items():
+        expected.setdefault(skill, []).extend(names)
+
+    for skill, names in expected.items():
+        path = repo.skill_md(skill)
+        text = repo.text(path)
+        loc = rel(repo.root, path)
+        for name in names:
+            if f"references/{name}" not in text:
+                problems.append(
+                    f"{loc}: 参照 'references/{name}' が本文にありません"
+                    f"（参照を失うと切り出した規約が読まれなくなります）"
+                )
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if hardcode_re.search(line):
+                problems.append(
+                    f"{loc}:{lineno}: 参照ファイルにハードコード絶対パスが再混入しています: {line.strip()}"
+                )
+
+    if problems:
+        return CheckResult(
+            check_id, False,
+            "参照ファイルに不整合（欠落 / 内容のズレ / 参照の喪失）があります",
+            "\n".join("    " + p for p in problems),
+        )
+    total = len(repo.reference_paths())
+    return CheckResult(
+        check_id, True,
+        f"参照ファイル {total} 件が実在し、共有分は正準と sha256 一致・全スキルから参照されている",
+    )
+
+
 CHECKS = [
     check_frontmatter,
     check_common_block,
+    check_reference_file,
     check_fallback_msg,
     check_meta_format,
     check_env_json,
