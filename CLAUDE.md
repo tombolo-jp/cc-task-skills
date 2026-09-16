@@ -6,6 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains a collection of custom skills for Claude Code that implement a task-based development workflow. The skills provide a structured approach to software development with 5 distinct phases: initialization, requirements, design (which now covers task breakdown and effort estimation as well), implementation (which now covers review and fix as a closed loop inside the same run), and verification (the verification phase covers both procedure generation and automated execution).
 
+## リポジトリの文書構成
+
+| ファイル | 役割 |
+|---|---|
+| `CLAUDE.md`（本ファイル） | **規範の正本**。設計原則・禁止事項・スキル横断の決定事項。全セッションで常時ロードされるため、論証と履歴は持たない |
+| `skills/<skill>/SKILL.md` | 各スキルの**仕様の正本**。常時ロードされるのは起動されたスキルの分のみ |
+| `skills/<skill>/references/*.md` | SKILL.md から切り出した規約。**該当フェーズに着手した時点でのみ読み込む**（「[設計原則: 規約は必要なフェーズで読み込む](#設計原則-規約は必要なフェーズで読み込む)」） |
+| `skills/<skill>/templates/*.md` | 生成物のテンプレート。生成の直前に読み込む |
+| `docs/design-principles.md` | 設計原則の**論証・実測結果・改訂履歴**。規範そのものではない |
+| `docs/skill-behaviors.md` | スキル別の挙動仕様（引数・分岐・終了条件・記録要件）の詳細 |
+| `docs/agent-teams.md` | Agent Teams の使い方・コスト・実行コンテキスト |
+| `README.md` | 利用者向けドキュメント |
+| `scripts/check_consistency.py` | ファイル間のズレの機械的検査（9検査） |
+| `scripts/measure_weight.py` | 常時ロード／条件付きロードの分量計測 |
+
+**規範を変更する場合は `CLAUDE.md` と該当 `SKILL.md` を更新すること。** `docs/` は根拠の保管場所であり、ここだけを直しても挙動は変わらない。
+
 ## Skill Architecture
 
 The repository contains 6 interconnected skills that work together (only task-init is excluded from `--team` option support):
@@ -25,39 +42,14 @@ Each skill is a directory under `skills/` containing a `SKILL.md` file and optio
 
 地の文の手順記述のみでは、フェーズのスキップ・実装の早期着手・フェーズの取りこぼしが起こりうる。これに対し、スキルの全フェーズを着手前に登録し、各フェーズの着手時に `in_progress`、完了時に `completed` へ遷移させることで、進捗と未達を常に可視化する。
 
-- 各スキルは「手順」冒頭（ステップ0）で進捗管理用の Task ツールをロードし、自スキルの全フェーズを Task として登録して状態遷移させる。これがこの原則の具体化である。登録は省略不可（成果物の必須要素）とし、スキップ・前倒し・状態遷移の省略を禁止事項として明記する。
+- 各スキルは「手順」冒頭（ステップ0）で進捗管理用の Task ツールをロードし、自スキルの全フェーズを Task として登録して状態遷移させる。これがこの原則の具体化である。登録は省略不可（成果物の必須要素）とし、スキップ・前倒し・状態遷移の省略を禁止事項として明記する。**ツールのロード手順・2方式の判定表・禁止事項は全6スキル共通のため `skills/<skill>/references/phase-tracking.md` へ切り出し**、SKILL.md のステップ0 はポインタと**そのスキル固有のフェーズ一覧**だけを持つ。
 - **ツールによる追跡はハーネス UI と連動する**。ライブタスク表示・スピナーに進行中フェーズが現れるため、応答本文へチェックリストを毎回再掲する必要がなくなり、記述も出力も簡潔になる。
 - **フォールバックにより可用性変動へ耐える**。ツールのロード可否はステップ0 で1回だけ判定し、取得できなければチェックリスト宣言方式で同じフェーズ集合を追跡する。判定はフェーズごとに繰り返さない。フォールバックしたことを告知するメッセージは出さない（チェックリスト自体が進捗表示を兼ねるため、利用者に不利益がない）。
 - これは「完璧な強制」ではなく「安定性の有意な向上」を狙う現実的スタンスである。ツールを主経路に置いても、登録そのものを行うか否かは最終的に LLM に依存する。それでも地の文だけの手順記述に比べ、スキップ・前倒し・取りこぼしを構造的に起こりにくくする。
 - `--team`（Agent Teams）成立時も、チームリードが自身の Task 一覧で全フェーズを追跡する。チームメイトへ委任した作業は `Agent` の戻り値で完了を確認してから `completed` へ遷移させる。
 - 今後スキルを追加・変更する際も、多段フローを持つスキルにはこの原則を適用すること。
 
-> **失効した方針（2026-07-22 〜 2026-08-06）**: 「進捗追跡の記述にツール固有名を持ち込まない（役割語で記述する）」という方針を置いていたが、**撤回する**。主経路をツールに置く以上、ロード対象と呼び出し規約を特定するためにツール名の明示は避けられないためである。
-
-### 前提: Task ツールの提供はモデル依存でゲートされる（2026-08-16 追記）
-
-**Claude Code 2.1.233 以降、進捗管理用の4ツールは一定バージョン以上のモデルでは既定で無効**である。したがって本原則の主経路を実際に通すには、`~/.claude/settings.json` へ次の env 設定が必要になる（README.md「インストール」手順3と同一内容）。
-
-```json
-{
-  "env": {
-    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
-  }
-}
-```
-
-判定ロジックの実測結果（CLI バイナリの解析による）:
-
-| バージョン | Task ツールの `isEnabled` | 既定の挙動 |
-|---|---|---|
-| 〜2.1.232 | `CLAUDE_CODE_ENABLE_TASKS !== false` かつリモートのキルスイッチに載っていないこと | **有効** |
-| 2.1.233〜 | 上記に加え、モデルがしきい値表（Opus 4.8 / Sonnet 5 / Fable 5 / Mythos 5）**以上**なら、リモートのオプトインフラグ（既定 false）か `CLAUDE_CODE_ENABLE_TODO_TOOLS` が必要 | しきい値以上のモデルでは**無効** |
-
-- **決定要因はモデルであってバージョンではない**、という理解は 2.1.233 以降に限って正しい。2.1.232 までは Opus 5 でも Task ツールは提供されていた。
-- リモートフラグはロールアウト状況で変わりうるため、**env 設定なしで有効な時期と無効な時期が混在する**。ステップ0 の2方式分岐（Task 方式 / チェックリスト方式）は今後も維持すること。
-- この env 変数は Agent Teams の `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` とは**無関係**である（前者は進捗管理の主経路、後者は `SendMessage` ライブ通信の任意スイッチ）。
-
-> **経緯（訂正）**: 2026-07-22 の改訂時、本原則は「フローは構造化チェックリストで明示的に追跡する」へ全面移行し、その理由を「Claude Code 側の仕様変更により Task ツールが提供されなくなり、主経路が恒久的に閉塞した」と記録していた。これは**事実誤認である**。当時観測された取得不可は特定バージョン（v2.1.217 / v2.1.218）における一時的な不具合を踏んだ可能性が高く、恒久的な仕様変更ではなかった。v2.1.223 では進捗管理用の4ツールがいずれも取得可能であることを実測で確認したため、Task 方式を主経路へ戻し、チェックリスト方式をフォールバックへ再配置した。
+> **Task ツールの提供はモデル依存でゲートされる。** Claude Code 2.1.233 以降、しきい値以上のモデルでは進捗管理用の4ツールが既定で無効である。主経路を実際に通すには `~/.claude/settings.json` へ `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` が必要（README.md「インストール」手順3と同一内容）。リモートフラグはロールアウト状況で変わりうるため、**ステップ0 の2方式分岐は今後も維持すること**。判定ロジックの実測結果・本原則の改訂履歴は [`docs/design-principles.md`](docs/design-principles.md) にある。なおこの env 変数は Agent Teams の `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` とは**無関係**である。
 
 この原則の各スキルへの反映状況と整合性は、`scripts/check_consistency.py`（後述「整合性チェック」）で機械的に検証する。
 
@@ -69,6 +61,35 @@ Each skill is a directory under `skills/` containing a `SKILL.md` file and optio
 - **失うのはツール層の型保証だけであり、構造的隔離は失わない。** 隔離を成立させているのは「別コンテキストの主体が判定すること」と「`dev-result.md` を渡さないこと」の2点であり、どちらも同期 `Agent` 委譲で完全に成立する。`Workflow` が提供していたのは**戻り値の型保証**であって隔離ではない。型保証の代替は「[設計原則: レビューは構造的に隔離する](#設計原則-レビューは構造的に隔離する)」の `RV-1`〜`RV-6`（スキル本体による検証・fail-safe 側への丸め・形式逸脱時の1回だけの再委譲）が担う。
 - **廃止した識別子は欠番として残す。** `task-dev` の degrade 梯子は `D-1` を欠番とし、`D-2`（同期 `Agent` 委譲）を主経路へ格上げした。`D-1` を再定義すると、過去タスクの `dev-result.md` に残る `degrade: D-1 → D-2` の記録が別の意味になり監査可能性が壊れるためである。
 - **この方針は `scripts/check_consistency.py` の `no-workflow` 検査（後述「整合性チェック」）が機械的に担保する。** 検査は**ランタイム固有の API 名**（`export const meta` / `resumeFromRunId` / `scriptPath` / `agent(` / `parallel(` / `pipeline(` / `phase(`）を禁止語彙とし、**単語 `Workflow` そのものは禁止しない**（禁止すると本節のような方針記述自体が検出され、検査が成立しない）。禁止語彙を字面として列挙せざるをえない行には、行内へ許可マーカーを置いて除外する。 <!-- allow-workflow-mention -->
+
+## 設計原則: 規約は必要なフェーズで読み込む
+
+**分量の大きい定型文・規約は SKILL.md 本体に置かず、`skills/<skill>/references/*.md` へ切り出し、そのフェーズに着手する時点で Read する。** SKILL.md 本体には「いつ読むか」を指す数行のポインタだけを残す。
+
+- **常時ロードされる行数がスキルの実効的なコストである。** 指定していないオプション（`--team`）の規約や、まだ到達していないフェーズ（レビュー委譲の戻り値契約）を実装中のコンテキストへ載せることは、変更が触れる実コードを読むために使えたはずの予算を先に消費する。読解を削らずに仕様の常駐量を削るのが本原則である。
+- **切り出す単位はフェーズ境界と一致させる。** 現行の3ファイルは、`agent-teams.md`（`--team` 指定時のみ）・`phase-tracking.md`（ステップ0 で必ず）・`task-dev` の `review-contract.md`（レビュー・修正フェーズ着手直前。複数タスクモードでは実装委譲の直前にも）である。フェーズ境界と無関係な分割は、読み込み忘れを招くため行わない。
+- **「読まれない参照」は規約の消失と同じである。** 本体から切り出した以上、参照が消えればその規約は永久に読まれない。`scripts/check_consistency.py` の `reference-file` 検査が、実在・スキル間の sha256 一致・**SKILL.md 本文からの参照の存在**の3点を機械的に担保する。
+- **重複配置は維持する。** 参照ファイルはスキルごとに同一内容で置く（`skills/*` をそのままコピーする既存のインストール手順を変えないため、および skills ルートへ SKILL.md を持たないディレクトリを作らないため）。重複そのものは従来どおり許容し、ズレは検査が担保する。
+- **逐語ブロックは要約して本体へ戻さない。** 委譲プロンプトの逐語ブロック（`review-contract.md` の 5-6-2）を記憶や要約から再構成すると、隔離規約と却下監査が「構造」から「指示」へ退化する。参照ファイルを読まずに委譲することを禁止事項とする。
+
+## 設計原則: 識別子とエラー列挙は削らず、増やさない
+
+**既存の安定識別子（`T-nnn` / `R-nnn` / `V-nnn` / `E-n` 等）とエラー表の行は、削除しない。** 代わりに**新規追加へ条件を課す**ことで、これ以上の増殖を防ぐ。
+
+2026-09-16 に「成果物へ書かれるか他ファイルから参照される ID だけを残す」という整理を検討し、測定のうえ**却下した**。根拠:
+
+- **ID の文字列コストは無視できる。** 全 SKILL.md・参照ファイル・テンプレートを通じてユニーク ID は約 300 件、うち1回しか出現しないものが約 84 件。すべて削っても節約は 1 KB に満たない（`python3 scripts/measure_weight.py -v` で再計測できる）。
+- **エラー表は同一原則の実例ではない。** `task-dev` 5-17 の各行は「継続 / 中断 / 正常終了 / 条件付きコミット」という**異なる帰結**を持つ。fail-safe 原則1文へ畳むと、この帰結の differentiation が失われる。失われるのは「レビュー未実施のコードをコミットしてよいか」の判定そのものであり、危険側への丸めになる。
+- **冗長な散文は実際にはほとんど無い。** 同一ファイル内で 35 字以上が重複している箇所は全スキル合計で 1 千字未満（仕様全体の 0.2% 程度）であり、その大半は**委譲プロンプトの逐語ブロック**（各プロンプトが単独で完結する必要があるため、意図的な重複）である。
+- **欠番は監査可能性そのものである。** `E-14` / `E-29` / `E-30` / `E-34`、degrade 梯子の `D-1` などの欠番は、過去の成果物に残る記録の意味を保存している。再定義も詰め直しも行わない。
+
+**したがって、分量の削減は「識別子や行を削る」ではなく「常時ロードを減らす」で行う**（「[設計原則: 規約は必要なフェーズで読み込む](#設計原則-規約は必要なフェーズで読み込む)」）。
+
+**新規追加の条件（今後の増殖を防ぐ規律）**:
+
+- **新しい ID を導入してよいのは、それが ① 成果物へ書き出されるか、② 定義した節の外から参照されるか、③ 閉じた語彙の要素である場合に限る。** 節内でしか使わない説明のための通し番号は付けない。
+- **新しいエラー行を足してよいのは、既存のどの行とも「全体（継続 / 中断 / 正常終了）」または「記録先」が異なる場合に限る。** 同じ帰結の事象は既存行の事象欄へ書き足す。
+- **新しい名前空間（`XX-n`）を作る前に、既存の名前空間へ収まらないかを確認する。** 現在 37 の名前空間があり、これ以上の増加は参照時の解決コストに見合わない。
 
 ## 設計原則: レビューは構造的に隔離する
 
@@ -118,11 +139,7 @@ Each task follows a standardized directory structure:
 
 以上より、利用者にモデル選択を委ねる手段は「`model` を指定しない（＝継承）」以外に存在しない。**今後スキルを追加する際も `model` を指定しないこと**（`scripts/check_consistency.py` の `frontmatter` 検査が model の再混入を検出する）。
 
-### 補足: 精度とコストの考え方
-
-各スキルは高精度な設計・レビュー・実装を要求するため、**Opus 系の使用を推奨**する。ただしこれは利用者の判断に委ねる方針であり、スキル側では強制しない。軽量モデル（Haiku 等）のセッションでスキルを実行すると、生成物の品質が落ちうる点には留意すること。
-
-> **経緯（失効済み）**: 過去には「Claude Code で Sonnet の 1M context を使うには API キーが必須」という理由で全スキルを `opus` に固定していた。この制約は Sonnet 5 のリリース（2026-06-30 / Claude Code v2.1.197）で解消済みであり、現在 `sonnet` エイリアスは 1M context をネイティブに持ち追加課金なしで利用できる。この経緯は現行の設計判断の根拠ではない。
+> **精度とコスト**: 各スキルは高精度な設計・レビュー・実装を要求するため **Opus 系の使用を推奨**するが、強制はしない。軽量モデルのセッションでは生成物の品質が落ちうる。`model` 固定をやめた経緯は [`docs/design-principles.md`](docs/design-principles.md) にある。
 
 ## モデル確認の仕組み
 
@@ -156,129 +173,47 @@ Each task follows a standardized directory structure:
 
 ## Key Skill Behaviors
 
-> **フロー強制（全スキル共通）**: 6スキルすべてが「手順」冒頭の **ステップ0** で自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は単一タスクモードで12フェーズ（`--team` 非依存）、複数タスクモードで7フェーズを登録し、加えて実行時に design.md の実装タスク一覧（`T-nnn`。todo.md が存在する場合はその項目も）を Task として動的登録して1件ずつ着手・完了を明示し、さらにレビューパス1周ごとに `[review pass i/3]`（修正必須があれば `[fix pass i/3]` も）を動的追加する（パス内の個別 `R-nnn` は Task 化しない）。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify** は既定モードで18フェーズ（`--manual` は7、`--run-only` は12）を登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
+> **フロー強制（全スキル共通）**: 6スキルすべてが「手順」冒頭の **ステップ0** で `references/phase-tracking.md`（共通の判定手順）を読み込んだうえで、自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は単一タスクモードで12フェーズ（`--team` 非依存）、複数タスクモードで7フェーズを登録し、加えて実行時に design.md の実装タスク一覧（`T-nnn`。todo.md が存在する場合はその項目も）を Task として動的登録して1件ずつ着手・完了を明示し、さらにレビューパス1周ごとに `[review pass i/3]`（修正必須があれば `[fix pass i/3]` も）を動的追加する（パス内の個別 `R-nnn` は Task 化しない）。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify** は既定モードで18フェーズ（`--manual` は7、`--run-only` は12）を登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
 
-### /task-init {task_name} [URL]
-- Creates `.claude/tasks/{task_name}/` directory structure
-- Creates init.md for capturing raw customer requests
-- Generates templated req.md with sections for overview, background, functional/non-functional requirements, impact analysis, constraints, and system relationships
-- **URL argument (optional, 2nd positional)**: When a URL is provided (e.g., a Backlog/GitHub/Jira ticket or any web page), fetches the page and transcribes its **body and all comments verbatim** into init.md, saves any attachments to the `files/` subdirectory, and appends a **summary** section at the end of init.md
-  - **Fetch method**: prefers MCP (service-specific MCP detected via ToolSearch by URL domain), falling back to a **browser-first chain** (claude-in-chrome → chrome-devtools → Playwright → WebFetch)
-  - **No fetch method available**: returns an error and exits **without creating init.md or the task directory** (the fetch-method decision happens before `mkdir`)
-  - **Partial fetch**: if some content (files/comments) cannot be obtained due to the method's limits, processing continues and the missing items are explicitly noted inside init.md
-  - **URL quoting**: single quotes are recommended (URLs contain `?`/`&`/`#`); the skill strips surrounding quotes if present
-- Note: design.md, dev-result.md, verify.md, verify-result.md are created by their respective skills (task-design, task-dev, task-verify)
+各スキルの引数・分岐・終了条件・記録要件の詳細は **[`docs/skill-behaviors.md`](docs/skill-behaviors.md)** にある（正本は各 `skills/<skill>/SKILL.md`）。
 
-### /task-req {task_name} [--team]
-- Reads raw customer requests from init.md
-- Analyzes and structures the information into req.md
-- Creates a draft requirements document from ambiguous requests
-- **要確認事項セクション**: Consolidates items needing confirmation into a "要確認事項" section at the end of req.md — plain (non-numbered) bullets written as self-contained, one-question-per-item prompts, keeping inline "（要確認）" markers in the body traceable to the list; section order is fixed as 要確認事項 → メタ情報 (metadata last). **A content filter keeps only questions whose answer changes a design or implementation branch**: inclusion comes first (the branch test — can you write, concretely and in two or more places, how design.md §1–§11 or the §12 task list would differ per answer?), then a closed exclusion vocabulary (`X-1` schedule / `X-2` commercial & cost / `X-3` staffing & process / `X-4` interpersonal communication / `X-5` meta questions / `X-6` answerable from the codebase yourself), with **anything undecidable kept** (fail-safe points the opposite way from `task-verify`'s skip decision). Excluded items get **no inline marker and no fallback section**, and the exclusion count is never reported; if zero items remain, **the 要確認事項 section itself is not emitted** and メタ情報 becomes the last section
-- **`--team` option**: Deploys a market/tech research agent and an impact analysis agent in parallel; team lead integrates results into req.md
-
-### /task-req-update {task_name} [--team]
-- Reads req.md and parses the "要確認事項" section at its end
-- Determines each item's resolution status by whether the user added an indented child element (reply) beneath it
-- Reflects resolved items' answers into the relevant body sections (replacing "（要確認）" markers with confirmed content) and removes those items from the list
-- Consolidates req.md into just the information needed for detailed design (task-design), conservatively preserving confirmed/functional/non-functional requirements and constraints
-- Leaves unresolved items in place; deletes the entire "要確認事項" section once all items are resolved
-- Reports the number of unresolved items and the re-run path, enabling an "answer → re-run" loop (idempotent). Directly updates req.md (no dedicated report file / template)
-- **`--team` option**: Deploys an answer-reflection agent and a consolidation agent in parallel; team lead judges unresolved items and finalizes req.md
-
-### /task-design {task_name} [--team]
-- Reads req.md to understand task scope
-- Analyzes existing project structure to maintain consistency
-- Reads the design template from `templates/design-template.md`
-- Creates comprehensive design.md covering architecture, components, file structure, data design, API design, error handling, testing strategy, and performance/security considerations
-- **Also produces the implementation task list and the effort estimate in the same run.** The generated design.md is split by a **設計確定線 (design freeze line)**: §1–§11 are design sections, §12 is `## 12. 実装タスク一覧`, §13 is `## 13. 工数見積もり`, and `## メタ情報` is always last
-- **`## 12. 実装タスク一覧`** is the single section downstream skills parse. Every item carries a stable `` `T-nnn` `` identifier (3-digit zero-padded, numbering order = implementation order, gaps allowed, duplicates prohibited, IDs never reused) plus 対象 / 作業 / 依存 / 完了条件 / 見積もり (注意点 optional). **task-dev never rewrites these checkboxes** — progress lives in dev-result.md
-- **`## 4. ファイル構造` must record estimated line counts** per file; their total is the input to the sanity check
-- Performs effort estimation for manual implementation by a developer already familiar with the codebase (design reading, stakeholder coordination, and calendar lead time are excluded from effort; review handling is capped at 15% of implementation effort)
-- **Three-layer estimate**: §0 pre-implementation spikes (blockers resolved in 0.5–1h each) / §A implementation effort (writing code + verification) / §B ancillary work (environment setup, release, documentation). **§13-5 (§A) holds the roll-up only** — the task detail lives solely in §12, so nothing is written twice
-- **Mandatory sanity check (step 5-3)**: computes lines-of-code ÷ implementation hours; an estimate below 30 lines/h is rejected as inflated and sent back to step 5-1. **Rework is capped at 2 rounds**, with early abort when the §A total is unchanged; on reaching the cap the estimate is adopted as-is and flagged in §13-3 for the user to judge
-- Converts open-ended uncertainty into spikes rather than unbounded buffers; buffer is ±30% on §A, while §B is presented as a raw lower–upper range with no coefficient
-- Keeps task count to 8–12 by merging work on the same file or class; **anchoring avoidance** is enforced structurally by the freeze line — design sections are read-only during estimation, and any pre-existing estimate is compared only after building one's own roll-up
-- **`--team` option**: runs in **two sequential phases** — phase 1 deploys data design, API/interface design, and security/performance agents in parallel to fix §1–§11; phase 2 then deploys a decomposition/roll-up agent and a **reduction reviewer** (asymmetric roles — the reviewer's job is to cut effort and to reject estimates failing the sanity check). Team lead integrates results into design.md; rejected reduction findings must be justified in §13-9
-
-### /task-dev {task_name}[,{task_name}...] [--team]
-- Reads design.md to understand implementation requirements (**todo.md is read only when it exists**, for backward compatibility with tasks created before the merge)
-- Reads report template from `templates/dev-result-template.md`
-- Implements tasks sequentially following the design's implementation task list (`T-nnn`)
-- Maintains code quality, follows existing patterns, includes appropriate tests
-- Reports progress after each task completion
-- Creates dev-result.md with implementation overview, changed files, technical details, and completion report
-- **Input resolution (5 branches)**: design.md missing → skip; design.md with §12 and no todo.md → proceed on design.md alone; design.md **without** §12 and no todo.md → **append `## 12. 実装タスク一覧` to design.md first** (announced to the user, never silently), then implement; when todo.md exists it is **always read together with design.md**, and design.md wins on conflict. Progress tasks are registered as `[T-nnn]` for design-derived items and `[todo i/N]` for todo.md-derived ones
-- **Argument parsing (`AP-1`〜`AP-8`), evaluated before the `--team` branch**: the only known flag is `--team`; **an unknown flag is an error** (`--tema` / `--no-review` must not silently fall through, because this skill now rewrites repository code during the fix phase). The error exits **before** the step-0 phase registration so that no unexecuted phase is left on the progress list. **There is no option that skips the review** — `--no-review` / `--review-only` equivalents do not exist and the loop always runs
-- **The "permission switch line"** separates the two phases at "the last `T-nnn` is done and the implementation sections of `dev-result.md` are written": before it, `dev-result.md` is created/overwritten wholesale, code may change freely within the `T-nnn` scope, and `--team` parallelizes implementation; after it, `dev-result.md` is **append-only** (plus the limited edits W-3 / W-6 allow), code may change **only where an unresolved `R-nnn` (fix-required) points**, and the judgment's inputs are restricted to req.md / design.md / the target file paths / the review checkpoints. In multi-task mode the line is drawn **per task**, right after the implementation delegation returns `STATUS: success` and before that task's commit
-- **Review–fix loop (max 2 rounds, same invocation; the 2nd round runs only when must-fix findings remain)**:
-  - **Review is always delegated** to a separate context (`RI-1`), with or without `--team`. The one route is a **synchronous `Agent` call with no `name`** (`subagent_type: "general-purpose"`, `run_in_background: false`) — it **never** falls back to a `name`-tagged background spawn, whose results are not returned in the tool result at all. Rung `D-1` is **vacant** (Dynamic Workflows abolished; IDs are never reused) and `D-2` is now the primary route. Self-review is allowed only on degrade rung `D-3` (single-task mode only), and every degrade must be announced verbatim and recorded in `dev-result.md` — never silently
-  - **The delegation prompt is a closed list of 12 items (`RP-1`〜`RP-12`)**, whose verbatim source of truth is now the three prompt blocks embedded in the SKILL.md body (review / implement / fix) — `RP-12` requires the reviewer to declare which assigned paths it actually reviewed and which it could not. **`dev-result.md` is never passed** — it is the implementer's own account, and reading it suppresses findings. Changed files are passed as **paths plus the changed line ranges** obtained mechanically from `git diff --unified=0` (a focus range for perspectives ④/⑤ only; ①②③ must still read whole files against req.md / design.md, because they detect *missing* code). **Diff bodies are never passed** — deleted old implementation would let the reviewer reconstruct implementation intent. From round 2 the only carried-over context is `R-nnn` / a one-line summary / resolved-or-not. Rejection reasons, priority-change reasons, and fix difficulty are never passed
-  - **Return contract is a trailing ` ```json ` fence**, validated by the skill itself (`RV-1`〜`RV-6`), because a synchronous `Agent` call has no tool-layer schema enforcement. Out-of-vocabulary values are **rounded away from the dangerous side** (an unknown `priority` becomes `高`; an unknown `defectClass` becomes `other` while the declared priority survives via `max(default, declared)`; `disposition` is **never** rounded — it raises `E-36`), and every rounding is recorded on a `- 丸め:` line. A malformed return is **re-delegated exactly once** (`E-36`, with only the one-line fact that the previous response was malformed — never feedback on the findings themselves); if it is still malformed the agent counts as **unreceived**, i.e. "not inspected", not "no findings". Retries on non-receipt are capped at **3 (15s / 60s / 180s backoff)**; where no wait mechanism exists the re-delegation happens immediately (`BK-4`), and `BK-2` / `BK-3` (jitter) are vacant. Non-receipt is the **only** basis for judging that a review did not happen. The overall verdict is deliberately **not** a schema key: it is derived from `findings[].priority`, whose floor is the defect class's default priority. `coverage` (`reviewedPaths` / `unreviewedPaths` / `unreviewedReason`) is mandatory, and the caller computes the effective unreviewed set as `unreviewedPaths ∪ (assigned − reviewedPaths)` — anything appearing in neither list counts as unreviewed (fail-safe)
-  - **Stable identifiers `R-nnn`** (3-digit zero-padded, detection order, gaps allowed, duplicates prohibited, IDs never reused) are numbered **solely by the caller** — reviewers never assign them. An existing ID is inherited when file / symbol / defect class all match. **The defect class is a closed 9-value vocabulary** (`requirement_unmet` / `design_deviation` / `task_incomplete` / `correctness` / `security` / `error_handling` / `test_missing` / `maintainability` / `other`) whose default priority is fixed, which also blocks arbitrary priority manipulation
-  - **Stagnation is judged by a signature** — `<R-nnn>|<class>|<basis hash>` over the fix-required-and-unresolved findings only, with prose excluded from the hash (line numbers stripped, paths normalized) so the same defect hashes identically across rounds
-  - **Exit conditions, evaluated in this order** (`S-1`〜`S-6`): zero unresolved fix-required → normal exit; identical signature two rounds running → stagnation; a strictly growing signature (**once** — with a cap of 2, "twice running" can never be reached) → regression; `loop == 2` → cap reached; a fix round that changed no code → immediate abort; otherwise → next round
-  - **Rejecting a finding requires evidence**: one of the five classes `J-1` (factual error) / `J-2` (as specified) / `J-3` (out of scope) / `J-4` (existing-pattern conformance) / `J-5` (recommended-only), each with externally checkable evidence (path:line, or a verbatim quote from req.md / design.md). **A rejection whose evidence cannot be written is not a rejection** — it stays an unresolved fix-required item (fail-safe), and fix-required items may only be rejected under `J-1` / `J-4`. Lowering a priority below its default is audited like a rejection; raising it is free
-  - **Fixing is single-agent** and never parallelized; `req.md` / `design.md`, `.git/**`, other task directories, paths outside the project root, `node_modules` / `vendor`, and secrets are all write-prohibited (such findings become `保留（要判断）` / `保留（安全境界）` and drop out of the stop condition)
-- **Exit categories are a closed list of 9** (the last two are new and sit **outside** `S-1`〜`S-6`): `全指摘解消` / `修正推奨のみ残存` / `ループ上限到達` / `停滞による早期中断` / `退行検出` / `無変更による中断` / `修正予算超過` / `レビュー未実施（委譲不成立）` / `レビュー範囲不完全`. `S-0a` (nothing received and the degrade ladder `D-2`〜`D-4` is exhausted) is evaluated **first**, because `S-1` (zero unresolved must-fix) is otherwise trivially true when no review came back at all — "delegation never happened" would be recorded as "everything resolved". `S-0b` raises `incomplete_scope` and overrides only the exit category. The two new categories **may still be committed** in multi-task mode (`C-11b`), but only when the record requirements are met and a fixed one-line commit **body** states the fact; the commit **subject** stays exactly `<TASK>` (`C-5`)
-- **Records**: `dev-result.md` gains `## レビュー指摘一覧` / `## レビュー・修正ログ` / `## task-verify へ引き継ぐ事項` / `## 終了サマリ`, all before the always-last `## メタ情報` — **13 headings in total** (`## レビュー総合判定` was folded into `## 終了サマリ` as `- 総合判定:` / `- 内訳:` / `- 検査範囲:`, and `## 欠陥ではない所見` was abolished along with the `observations` return key). The loop **appends only** and never re-reads the file (loop state lives in the main conversation). Metadata's Agent Teams field is decided by the 2 Agent Teams conditions alone — **delegation performed without `--team` does not count**, so a run without `--team` records `無効（指定なし）` no matter how many agents actually ran
-- **Completion report**: the loop count, unresolved `R-nnn`, and whether review isolation held are always reported, and the user is always told that **convergence of this loop is not proof of quality** (there is no external evidence source; the real pass/fail judgment belongs to `task-verify`)
-- **`--team` option**: applies to implementation (independent tasks by dependency field, split at file level to avoid concurrent edits) and to the **review phase only** — **1 reviewer covering all five perspectives without `--team`, 3 reviewers spawned in one message with it**, split as ①requirements + ②design + ③task completion / ④code quality / ⑤security. **File-level fan-out is abolished**; the head-count is fixed at 1 or 3. The team lead may only deduplicate, unify priorities, and unify `R-nnn` numbering; **it never selects which findings survive**. The **fix phase is out of `--team`'s scope** (single agent). The reviewer line-up must not change between rounds, or the signature becomes unstable and stagnation detection stops working
-- **Comma-separated multi-task mode (task-dev only)**: The 1st argument accepts `task1,task2,task3` to implement several tasks in one invocation. Whether the specifier contains a comma is evaluated **before** the `--team` branch, and it selects the execution mode:
-  - **Parsing**: separator is `,` only; whitespace around commas, empty elements (`t1,,t2` / trailing comma), and task names outside `^[A-Za-z0-9._-]+$` are **errors** (immediate exit, nothing written). Duplicates are de-duplicated with a warning. A specifier without a comma keeps the legacy single-task behavior
-  - **Pre-flight checks**: aborts entirely if not a git repository or if the working tree is dirty (the uncommitted file list is shown); per task, missing `design.md` → skip (deliverable missing), existing `dev-result.md` → skip (already implemented). The target count is displayed without asking for confirmation
-  - **Dirty judgment (`G-0`〜`G-3`)**: `G-0` excludes `.claude/tasks/<TASK>/**` for the specified tasks (the skill's own deliverables); `G-1` evaluates dirtiness **once, at start-up**, keeps it as `baseline_dirty`, and never re-judges mid-run — the fix phase changes repository code, so re-judging would always trip on the skill's own edits. Anything the run produces is accumulated into `changed_by_skill` and excluded from every later judgment
-  - **Delegation**: each task runs as **implementation → review → fix → commit**, each stage in an independent `general-purpose` subagent (synchronous, sequential — never parallel) so context does not accumulate across tasks. Because the main conversation only ever holds the implementer's `STATUS` / `FILES` / `SUMMARY`, review isolation here is **structurally stronger than in single-task mode** — which is why review is delegated in this mode too rather than degraded to self-review. A malformed return is treated as a failure
-  - **Commit per task**: stages the union of the implementer's `FILES`, the files touched by review fixes, and `dev-result.md` (`git add -- <paths>`; `git add -A` is prohibited) and commits with the task name as the message. **At most one commit per task** — review fixes never get their own commit. **Committing happens only when zero unresolved fix-required findings remain** (`C-11`); a run that hits the cap, stagnates, regresses, or made no changes leaves the implementation **uncommitted** and stops before later tasks. No push, no branch operations, commits land on the branch active at start-up
-  - **`--team` exclusivity**: with a comma-separated specifier, `--team` is ignored with a warning (a subagent cannot spawn further subagents). Single-task invocations keep full `--team` support
-  - **Failure handling / idempotency**: a failed task aborts the run; already-committed tasks stay committed and are auto-skipped on re-run. A per-task result summary is always printed (success or abort), and a task whose loop failed to converge is reported as `失敗` with the abort reason and the count of unresolved `R-nnn`
-
-### /task-verify {task_name} [--manual] [--run-only] [--team]
-- **Three execution modes**, selected by flags parsed **before** the `--team` branch (M-1〜M-7): `full` (default — generate then execute), `generate_only` (`--manual`), `run_only` (`--run-only`). `--manual` and `--run-only` together is an **error** (immediate exit); `--run-only` with `--team` **ignores `--team`** with a warning; an unknown flag is an **error** (a `--manul` typo must not silently fall through to the mode that rewrites the DB and the repository). The task name is validated against `^[A-Za-z0-9._-]+$`
-- **Phase registration**: 18 phases in the default mode, 7 with `--manual`, 12 with `--run-only`
-- **Generation phase**: reads req.md, design.md, and dev-result.md — including its `## レビュー指摘一覧` / `## レビュー・修正ログ` / `## task-verify へ引き継ぐ事項` sections, which carry what used to live in separate review/fix reports — plus the verify template from `templates/verify-template.md`, analyzes the implementation code, and writes verify.md **in full**. `review.md` / `fix-result.md` are read as an **optional extra input that only exists in tasks created before the review/fix merge**
-  - **Default (`detailed`)**: emits automation-ready test cases — a machine-readable `## 検証前提` yaml block (base URL, start command, test accounts) as the **first** section, stable identifiers `` `V-nnn` `` on every checkbox item, and multi-line cases (`前提` / `操作` / `入力` / `期待結果` / `自動化メモ`). **Expected results may not be omitted**; ⏱ estimates are not emitted; items that only a human can judge go to `## 人手確認（自動化不可）`
-  - **`--manual`**: the concise human-oriented format (2026-07-31 spec) — one item per line (`` - [ ] `V-nnn` <操作> → <期待結果> ``; the `→` part is omitted when the expected result is obvious), quick-win steps first, ⏱ total once at the top. Stable identifiers and the preamble block are still emitted (the concise form can also be fed to `--run-only`)
-  - **The 「付録: 自動化推奨の確認観点」 section is abolished in both modes.** In detailed mode those checkpoints become executable steps in the body; in manual mode they are simply left out
-  - `V-nnn` numbering rules are part of the main text (not only of the `--team` path): existing IDs are **inherited** for substantially identical items, new items get `max + 1`, and deleted IDs are **never reused**
-  - **B-5**: the generation phase may not write a non-allowed host into `base_url` (otherwise it would open a bypass around the external-origin hard block)
-- **The "permission switch line"** separates the two phases: before it, verify.md is created/overwritten wholesale and `--team` applies; after it, only **3 spots** may be edited (checkboxes / `## スキップした項目` / `null` keys in `## 検証前提`) and the phase runs single-agent
-- **Automatic-execution phase** (default and `--run-only`):
-  - **Tool chain (fixed order, first-available wins)**: `playwright-cli` → Chrome DevTools for agents (CLI layer) → Chrome DevTools MCP → Claude in Chrome. Detection runs once per invocation. If none is available it prints a verbatim message and **aborts the execution phase only** — in the default mode verify.md is kept and the message says so (the intentional near-reverse of `task-init`'s chain: that skill needs an authenticated real session, this one needs deterministic unattended repetition)
-  - **Skip decision (5 axes, fail-safe)**: visual/subjective, out-of-system resources, destructive operations not covered by protection, missing execution handles, and undecidable. Skipped items and reasons are written to a `## スキップした項目` section in verify.md. **SK-1** isolates the decision's input to the verify.md text alone, because writing the items yourself biases the judgment toward under-skipping (the dangerous direction); `SK-3` may delegate the sorting to a subagent so the isolation is structural rather than merely instructed
-  - **Side-effect protection (FR-9)**: two generic requirements — blocking outbound mail (P-MAIL) and DB backup/restore (P-DB) — implemented as provider chains applied **only when the environment is detected**. Every provider must have a `verify` operation; restore order is fixed **DB → mail**. Restore state is journaled write-ahead in `.verify-run/state.json` so an abnormal exit can be recovered on the next run
-  - **Loop control**: counter increments at the start of each verification pass (first pass = 1), max 5; early abort when two consecutive passes produce an identical finding signature, or when a fix round changes no code. Re-verification is scoped to failed items, their dependents, and the impacted range. The counter carries over on `--run-only`, but **resets to 0 whenever the default mode regenerates verify.md** (the item set is a different one)
-  - **Read-only investigation may be delegated** to a synchronous `general-purpose` subagent to relieve context pressure; a malformed return degrades to self-investigation with a warning rather than aborting
-- **Gates run before generation** (`G-0`〜`G-5`): the working-tree dirty check happens **before** verify.md is written, so a dirty abort leaves no verify.md either. **G-0** excludes `.claude/tasks/<TASK>/**` from the dirty set — the skill's own deliverables, which the default mode necessarily rewrites on every run
-- **Two cost warnings**: warning A before the generation phase (so the budget is announced before generation tokens are spent), warning B after the sorting and before protection is applied
-- **Safety boundary**: **never commits** (does not even touch the index); does not rewrite req.md / design.md
-- Writes results back to verify.md (`- [ ]` → `- [x]` only when the expected result was met) and appends to verify-result.md; verify-result.md's metadata Agent Teams field is always `無効（指定なし）` (the execution phase is out of `--team`'s scope), while verify.md's records the generation phase's status
-- **`--team` option**: applies to the **generation phase only**. Role split depends on `output_mode`. `detailed` deploys a happy-path test-case designer, a peripheral test-case designer, and an **automation-feasibility reviewer** (asymmetric — the reviewer's job is to eliminate items that cannot be executed as written). `--manual` keeps the existing happy-path designer, peripheral designer, and **reduction reviewer** — the reduction reviewer runs **only** with `--manual`
+| スキル | 起動 | 要点 |
+|---|---|---|
+| `task-init` | `/task-init {task_name} [URL]` | タスクディレクトリと init.md / req.md（空テンプレート）を作成。URL 指定時は本文と全コメントを逐語転記し添付を `files/` へ保存する。取得手段ゼロなら**ディレクトリごと作らずエラー終了** |
+| `task-req` | `/task-req {task_name} [--team]` | init.md から req.md を起こす。末尾の「要確認事項」は**回答で設計・実装の分岐が変わる問いだけ**に絞る（包含が先・除外語彙 `X-1`〜`X-6`・判定不能は残す）。0件なら節ごと出力しない |
+| `task-req-update` | `/task-req-update {task_name} [--team]` | 「要確認事項」への回答を本文へ反映し確定版へ整理。未解決項目は残し、全解決で節を削除。冪等（回答 → 再実行のループ） |
+| `task-design` | `/task-design {task_name} [--team]` | §1〜§11 の設計 ＋ §12 実装タスク一覧（`T-nnn`）＋ §13 工数見積もりを1回で完結。**設計確定線**より上は見積もり中 read-only。行数 ÷ 実装時間 < 30 行/h の見積もりは差し戻し（上限2周） |
+| `task-dev` | `/task-dev {task_name}[,...] [--team]` | `T-nnn` 順に実装し、続けて**レビュー → 修正 → 再レビューを最大2周**（レビューは常に別コンテキストへ委譲）。**権限の切替線**の手前と奥で書き込み権限が変わる。カンマ区切りで複数タスクを逐次実装しタスクごとにコミット |
+| `task-verify` | `/task-verify {task_name} [--manual] [--run-only] [--team]` | 検証手順書を生成し、既定では**そのまま自動実行**（上限5周）。`--manual` は人間向け簡潔版の生成のみ、`--run-only` は実行のみ。**コミットは一切しない** |
 
 ## Agent Teams オプション
 
-5つのスキル（task-init を除く全スキル）は `--team` オプションに対応しています。
+5つのスキル（task-init を除く全スキル）は `--team` オプションに対応する。`--team` を付けるだけで並列実行が起動し、環境変数の事前設定は **不要**。使い方・コスト・実行コンテキスト・後方互換性の詳細は **[`docs/agent-teams.md`](docs/agent-teams.md)** にある。委譲規約の逐語本文は各スキルの `references/agent-teams.md` が持つ（`--team` 指定時にのみ読み込まれる）。
 
-### 使用方法
+> **`task-dev` における `--team` の適用範囲**: 実装フェーズ（依存関係のないタスクの並行実装）と**レビューフェーズのみ**に適用される。`--team` は「**並列体数と観点分割のプロファイル選択**」を意味し、レビューは **`name` なしの同期 `Agent` 委譲**で行う（無効: **1体**が観点①〜⑤すべて / 有効: **3体**を同一メッセージ内で並列起動し、①要件整合＋②設計整合＋③実装タスクの完了状況 / ④コード品質 / ⑤セキュリティ・堅牢性 に分割）。**修正フェーズは適用対象外**（単一エージェントが逐次実行）。並列化すると共有資源が競合し、どの修正がどの指摘に対応したのかが失われて終了保証が成立しないためである。なお**レビューの委譲そのものは `--team` とは独立**しており、`--team` 未指定でも必ず1体以上へ委譲される（**`--team` 未指定時の委譲は Agent Teams の成立判定に含めない**）。
 
-```bash
-/task-dev my-task --team
-/task-verify my-task --team
-```
+**成果の返り方は spawn の形態によって決まる。** `name` を**付けない**同期委譲（`run_in_background: false`）は最終メッセージが tool result として**戻り値で返る**。`name` を**付けた** spawn は**バックグラウンド実行**となり成果は tool result では返らない（受け取る手段は `SendMessage` だけ）。したがって**成果物を受領する委譲では `name` を付けない同期委譲を既定**とし、**`name` 付き spawn へは決してフォールバックしない**。
 
-> **`task-dev` における `--team` の適用範囲**: 実装フェーズ（依存関係のないタスクの並行実装）と**レビューフェーズのみ**に適用されます。`--team` は「**並列体数と観点分割のプロファイル選択**」を意味し、レビューは **`name` なしの同期 `Agent` 委譲**で行います（`--team` 無効: **1体**が観点①〜⑤すべて / 有効: **3体**を同一メッセージ内で並列起動し、①要件整合＋②設計整合＋③実装タスクの完了状況 / ④コード品質 / ⑤セキュリティ・堅牢性 に分割）。**ファイル数・行数に応じた分割ファンアウトは行いません。****修正フェーズは適用対象外**（単一エージェントが逐次実行）です。並列化すると共有資源が競合し、どの修正がどの指摘に対応したのかが失われて終了保証が成立しないためです。なお**レビューの委譲そのものは `--team` とは独立**しており、`--team` 未指定でも必ず1体以上へ委譲されます（**`--team` 未指定時の委譲は Agent Teams の成立判定に含めません**）。
+### Agent Teams 実行成立条件
 
-### 起動方法
+Agent Teams が `有効` と記録されるためには、以下の **2 条件すべて** を満たす必要があります:
 
-`--team` を付けるだけで並列実行（Agent Teams）が起動します。環境変数の事前設定は **不要** です。進捗はチームリードの Task 一覧で追跡します。
+1. `--team` 引数が指定されていること
+2. `Agent` ツールで委譲した担当が少なくとも 1 体実際に稼働（成果を返した）こと
 
-**成果の返り方は spawn の形態によって決まります。**
+> 環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` は成立条件に **含めません**（F-7。同変数がゲートするのは `SendMessage` のみであり、`Agent` spawn は変数なしで動作するため）。
 
-| spawn の形態 | 成果の返り方 |
-|---|---|
-| `name` を**付けない**同期委譲（`run_in_background: false`） | 最終メッセージが tool result として**戻り値で返ります** |
-| `name` を**付けた** spawn | **バックグラウンド実行**となり、成果は tool result では**返りません**（返るのは「まだ実行中」の旨のみで、完了はタスク通知で届きます）。この形態で成果本文を受け取る手段は `SendMessage` だけです |
+### フォールバック動作
 
-したがって、**成果物を受領する必要がある委譲では `name` を付けない同期委譲を既定**とします。`task-dev` のレビュー・実装・修正の委譲は**すべて `name` なしの同期 `Agent` 委譲**（`run_in_background: false`）で行います。**`name` 付き spawn へは決してフォールバックしません。**
+`--team` 指定時に **`Agent` ツールが利用不可、またはチームメイトが 1 体も稼働しなかった場合**、スキルは以下のメッセージを **必ず** 表示してから通常モードにフォールバックします（省略・要約禁止）:
+
+「⚠️ Agent Teams（チームメイトの起動）が現在の環境で利用できないため、Agent Teams モードを起動できません。今回は通常モードで実行します。」
+
+**重要**: スキルは「黙ってフォールバックする」ことを禁止しています。フォールバックする場合は必ず上記メッセージを表示します。
+
+**`--team` 未指定時の動作**:
+
+`--team` が指定されていない場合、スキルは Agent Teams に関するメッセージを **一切表示しません**。ToolSearch・チームメイト spawn などの Agent Teams 関連操作も **一切実行しません**。
 
 ### （任意）SendMessage ライブ協調の有効化
 
@@ -294,78 +229,13 @@ Each task follows a standardized directory structure:
 
 > **env 変数の役割（F-7）**: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が現在ゲートしているのは `SendMessage`（teammate 間ライブ通信）ただ 1 つです。`Agent` による spawn と、チームリードの Task による進捗追跡は **この変数なしでも動作します**。したがって変数は「Agent Teams を動かすためのスイッチ」ではなく「SendMessage ライブ協調レイヤを有効化する任意スイッチ」です。
 
-### コストに関する注意
-
-Agent Teams はトークン消費が大幅に増加します。チームメイトの生成・管理に伴い、通常の2〜5倍のトークンを消費する可能性があります。
-
-### スキル実行コンテキストについて
-
-6 スキル全てが **メイン会話のコンテキスト**で実行されます（`context: fork` は使用していません）。これは Agent Teams を成立させるために必要な設計上の選択です:
-
-- `context: fork` でフォークされたサブエージェントには、チームメイト spawn に必要な `Agent` ツールが引き継がれません（Claude Code 仕様: 「subagent は別の subagent を spawn できない」）
-- そのため、Agent Teams を Skills 経由で利用するには、スキル本体をメイン会話で実行する必要があります
-- トレードオフとして、スキル実行中の中間出力（ファイル読込・分析等）はメイン会話のコンテキストウィンドウを消費します。Opus 4.7 1M context モデルを使用していれば実用上問題は小さい想定です
-
-### Agent Teams 実行成立条件
-
-Agent Teams が `有効` と記録されるためには、以下の **2 条件すべて** を満たす必要があります:
-
-1. `--team` 引数が指定されていること
-2. `Agent` ツールで委譲した担当が少なくとも 1 体実際に稼働（成果を返した）こと
-
-> 環境変数 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` は成立条件に **含めません**（F-7。同変数がゲートするのは `SendMessage` のみであり、`Agent` spawn は変数なしで動作するため）。
-
-### 協調ツールのロード手順
-
-`--team` 指定時、スキルはライブ通信に用いるツールを以下でロードします。`Agent` は core ツールでメイン会話に常在するため、ToolSearch でのロードは **不要** です。進捗追跡用の Task ツールはステップ0 でロード済みのため、ここでは指定しません。
-
-```
-ToolSearch query="select:SendMessage" max_results=10
-```
-
-ToolSearch 結果の判定:
-
-| 結果 | 扱い |
-|------|------|
-| `SendMessage` が `<functions>` ブロックに含まれる | ライブ通信を併用可。チームリードの Task による進捗追跡と合わせて利用する |
-| `SendMessage` が含まれない（env 変数無効） | ライブ通信は使わず、`Agent` の戻り値方式で続行する（フォールバックしない） |
-| ToolSearch 自体がエラー終了 | `Agent` 戻り値方式で続行する（フォールバックしない） |
-
-> `Agent` による spawn 自体は上記いずれの場合でも実行可能です。`SendMessage` の可否は成立判定に影響しません。
-
-### フォールバック動作
-
-`--team` 指定時に **`Agent` ツールが利用不可、またはチームメイトが 1 体も稼働しなかった場合**、スキルは以下のメッセージを **必ず** 表示してから通常モードにフォールバックします（省略・要約禁止）:
-
-「⚠️ Agent Teams（チームメイトの起動）が現在の環境で利用できないため、Agent Teams モードを起動できません。今回は通常モードで実行します。」
-
-**重要**: スキルは「黙ってフォールバックする」ことを禁止しています。フォールバックする場合は必ず上記メッセージを表示します。
-
-**`--team` 未指定時の動作**:
-
-`--team` が指定されていない場合、スキルは Agent Teams に関するメッセージを **一切表示しません**。ToolSearch・チームメイト spawn などの Agent Teams 関連操作も **一切実行しません**。
-
-### 後方互換性
-
-`--team` オプションなしの従来の呼び出し方法は引き続き動作します:
-
-```bash
-/task-dev my-task       # 従来通り単一エージェントで実行
-/task-dev my-task --team  # Agent Teams モードで実行
-```
-
-`task-dev` のカンマ区切り指定（複数タスクモード）では、コンテキスト分離を優先するため `--team` は利用できません。同時に指定された場合は警告を表示のうえ `--team` を無視し、複数タスクモードで続行します。
-
-```bash
-/task-dev task1,task2,task3         # 複数タスクを逐次実装（タスクごとにコミット）
-/task-dev task1,task2 --team        # --team は無視され、複数タスクモードで実行
-```
-
 ## 整合性チェック
 
-本プロジェクトは「単一ファイル制約（include 機構なし）」のため、Agent Teams 共通ブロック・フォールバック文言・メタ情報フォーマット・テンプレート参照などの定型文が複数ファイルに重複して存在する。この重複は許容したうえで、ファイル間のズレを機械的に検出するのが `scripts/check_consistency.py`（Python 3 標準ライブラリのみ・サードパーティ依存ゼロ）である。
+Agent Teams 共通ブロック・フォールバック文言・メタ情報フォーマット・テンプレート参照などの定型文は、複数ファイルに重複して存在する。この重複は許容したうえで、ファイル間のズレを機械的に検出するのが `scripts/check_consistency.py`（Python 3 標準ライブラリのみ・サードパーティ依存ゼロ）である。
 
-検出する8検査:
+> **「単一ファイル制約（include 機構なし）」という旧前提は撤回する（2026-09-16）。** 本リポジトリはすでに `templates/*-template.md` を実行時に相対パスで Read しており、include 機構は存在し稼働していた。分量の大きい定型文は `references/` 配下へ切り出し、**そのフェーズに入って初めて読み込む**構成（progressive disclosure）へ移行済みである。詳細は「[設計原則: 規約は必要なフェーズで読み込む](#設計原則-規約は必要なフェーズで読み込む)」を参照。
+
+検出する9検査:
 
 | 検査ID | 内容 |
 |--------|------|
@@ -375,8 +245,9 @@ ToolSearch 結果の判定:
 | `meta-format` | 4テンプレートの `## メタ情報` 3行（3値表記含む）が一致するか |
 | `env-json` | CLAUDE.md / README.md の `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` が一致するか |
 | `template-ref` | 3スキル4テンプレートの参照が相対パスで実在し、ハードコード絶対パスの再混入がないか |
-| `no-workflow` | Dynamic Workflows のランタイム固有 API 名（`export const meta` / `resumeFromRunId` / `scriptPath` / `agent(` / `parallel(` / `pipeline(` / `phase(`）が、全6 SKILL.md・4テンプレート・`CLAUDE.md`・`README.md` へ再混入していないか（`CLAUDE.md` は `## 更新履歴` 以降を歴史的記録として除外）。**単語 `Workflow` そのものは禁止しない**（禁止すると「Dynamic Workflows を使用しない」という方針記述自体が検出され、検査が成立しないため）。禁止語彙を字面として列挙せざるをえない行（本検査自体の説明行）は、行内へ許可マーカー `&lt;!-- allow-workflow-mention --&gt;` を置くと除外される | <!-- allow-workflow-mention -->
-| `flow-checklist` | 廃止済みの旧タスク管理ツール名・旧チーム生成 API 名・**旧検証実行スキルのスラッシュ起動名**（task-verify へ統合済み）・**旧レビュースキルと旧修正スキルのスラッシュ起動名**（task-dev へ統合済み）が SKILL.md・CLAUDE.md（更新履歴節を除く）・README.md・テンプレートへ再混入していないか、および全6スキルに Task 方式＋フォールバックの記述を伴う `### ステップ0` が存在するか |
+| `no-workflow` | Dynamic Workflows のランタイム固有 API 名（`export const meta` / `resumeFromRunId` / `scriptPath` / `agent(` / `parallel(` / `pipeline(` / `phase(`）が、全6 SKILL.md・4テンプレート・`CLAUDE.md`・`README.md` へ再混入していないか（走査対象には `references/*.md` と `docs/*.md` も含む。`CLAUDE.md` は `## 更新履歴` 以降を歴史的記録として除外）。**単語 `Workflow` そのものは禁止しない**（禁止すると「Dynamic Workflows を使用しない」という方針記述自体が検出され、検査が成立しないため）。禁止語彙を字面として列挙せざるをえない行（本検査自体の説明行）は、行内へ許可マーカー `&lt;!-- allow-workflow-mention --&gt;` を置くと除外される | <!-- allow-workflow-mention -->
+| `reference-file` | 参照ファイル（`references/*.md`）が実在し、複数スキルへ同一内容で置かれるもの（`agent-teams.md` / `phase-tracking.md`）が正準と sha256 一致し、かつ**各 SKILL.md 本文から相対パスで参照されている**か（参照を失うと、本体から切り出した規約が永久に読まれなくなるため）。ハードコード絶対パスの再混入も検出する |
+| `flow-checklist` | （走査対象に `references/*.md`・`docs/*.md` を含む）廃止済みの旧タスク管理ツール名・旧チーム生成 API 名・**旧検証実行スキルのスラッシュ起動名**（task-verify へ統合済み）・**旧レビュースキルと旧修正スキルのスラッシュ起動名**（task-dev へ統合済み）が SKILL.md・CLAUDE.md（更新履歴節を除く）・README.md・テンプレートへ再混入していないか、および全6スキルに Task 方式＋フォールバックの記述を伴う `### ステップ0` が存在するか |
 
 実行方法:
 
@@ -395,6 +266,17 @@ git config core.hooksPath scripts/hooks
 ```
 
 対象ファイルを変更しないコミットは即スキップされる（高速パス）。緊急時は `git commit --no-verify` でバイパスできる。
+
+## 分量の計測
+
+「重厚すぎる」という議論を印象ではなく数値で行うために、`scripts/measure_weight.py`（Python 3 標準ライブラリのみ）を置く。**スキル1回の実行で常時ロードされる行数**（SKILL.md 本体）と、**該当フェーズに入って初めて読み込まれる行数**（`references/` / `templates/`）を分けて表示する。合否判定は持たない（常に exit 0）。
+
+```bash
+python3 scripts/measure_weight.py        # スキル別の内訳
+python3 scripts/measure_weight.py -v     # 識別子・重複の統計も表示
+```
+
+スキルへ記述を追加する際は、**それが「常時」列に乗るのか「条件付き」列に乗るのか**を意識すること。特定のオプションやフェーズでしか使わない規約は `references/` へ置く。
 
 ## Installation Method
 
@@ -416,6 +298,7 @@ The skills support Japanese language for requirements definition and design docu
 
 - **Staged Development**: Sequential progression through requirements → design (with task breakdown and estimation) → implementation (with the review → fix → re-review loop) → verification
 - **Quality Focus**: Emphasizes code quality, maintainability, and integration with existing systems
+- **Minimal Commentary**: Generated code carries only comments that cannot be recovered by reading the code; comment density is capped at the surrounding file's existing level, and implementation intent is recorded in `dev-result.md` rather than defended in comments
 - **Structural Isolation of Review**: The agent that wrote the code never judges it from its own context; review is delegated to a separate context and the implementer's own account is not passed along
 - **Progress Tracking**: Concrete todo lists for work management
 - **Consistency**: Respects existing code patterns and conventions

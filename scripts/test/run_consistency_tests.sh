@@ -33,8 +33,10 @@ trap cleanup EXIT
 # 正常リポジトリのスナップショットを作る（.git は除外し git 解決を切る → --root 明示）。
 SNAPSHOT="${WORKDIR}/snapshot"
 mkdir -p "${SNAPSHOT}"
-# 検査対象（skills / CLAUDE.md / README.md）のみコピー。
+# 検査対象（skills / docs / CLAUDE.md / README.md）のみコピー。
+# skills/ 配下には SKILL.md のほか references/ と templates/ が含まれる。
 cp -R "${REPO_ROOT}/skills" "${SNAPSHOT}/skills"
+cp -R "${REPO_ROOT}/docs" "${SNAPSHOT}/docs"
 cp "${REPO_ROOT}/CLAUDE.md" "${SNAPSHOT}/CLAUDE.md"
 cp "${REPO_ROOT}/README.md" "${SNAPSHOT}/README.md"
 
@@ -110,7 +112,11 @@ import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
 # 共通ブロック内に必ず存在する文言を改変（句点を変える）。
-t = t.replace("今回は通常モードで実行します。", "今回は通常モードで実行します!", 1)
+# 2026-09-16 の参照ファイル化以降、フォールバック文言は references/agent-teams.md 側へ
+# 移動したため、SKILL.md 本体に残る共通ブロックの文言をアンカーにする。
+OLD = "**この参照ファイルを読み込むのは `--team` 指定時だけです。**"
+assert OLD in t, "fixture 生成失敗: 共通ブロックが見つかりません"
+t = t.replace(OLD, "**この参照ファイルを読み込むのは `--team` 指定時だけです!**", 1)
 open(p, "w", encoding="utf-8").write(t)
 PY
 run_case "common-block 異常（task-req-update 改変）→ exit 1" "${F}" 1 "[common-block]"
@@ -198,11 +204,13 @@ F="$(make_fixture flow-checklist-tool)"
 import sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
-ANCHOR = "> **禁止事項**: (a) Task 登録／チェックリスト宣言の省略、"
-assert ANCHOR in t, "fixture 生成失敗: 禁止事項ブロックが見つかりません"
+# 2026-09-16 の参照ファイル化以降、禁止事項ブロックは references/phase-tracking.md へ
+# 移動したため、ステップ0 節に残るフェーズ一覧の導入行をアンカーにする。
+ANCHOR = "登録するフェーズ（この順序・各項目は imperative 形）:"
+assert ANCHOR in t, "fixture 生成失敗: ステップ0 のフェーズ一覧が見つかりません"
 t = t.replace(
     ANCHOR,
-    "> 旧来は `TodoWrite` で進捗を管理していました。\n>\n" + ANCHOR,
+    "旧来は `TodoWrite` で進捗を管理していました。\n\n" + ANCHOR,
     1,
 )
 open(p, "w", encoding="utf-8").write(t)
@@ -487,6 +495,60 @@ t = open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(t + "\n<!-- parallel( でファンアウトした体数 -->\n")
 NWC
 run_case "no-workflow 異常（テンプレートへ parallel( の再混入）→ exit 1" "${F}" 1 "[no-workflow]"
+
+# ---------------------------------------------------------------------------
+# (23) reference-file: 共有参照ファイルの内容を1スキルだけ改変する
+#      参照ファイル化で SKILL.md 本体から切り出した定型文は、include 機構が無いため
+#      複数スキルへ同一内容で置かれる。ズレを sha256 で検出できることを確認する。
+# ---------------------------------------------------------------------------
+F="$(make_fixture reference-file-drift)"
+/usr/bin/python3 - "${F}/skills/task-req/references/agent-teams.md" <<'RFA'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+OLD = "今回は通常モードで実行します。"
+assert OLD in t, "fixture 生成失敗: フォールバック文言が見つかりません"
+open(p, "w", encoding="utf-8").write(t.replace(OLD, "今回は通常モードで実行します!", 1))
+RFA
+run_case "reference-file 異常（共有参照ファイルの内容ズレ）→ exit 1" "${F}" 1 "[reference-file]"
+
+# ---------------------------------------------------------------------------
+# (24) reference-file: SKILL.md 本体から参照そのものを削除する
+#      参照を失うと、切り出した規約が永久に読まれなくなる（本体には残っていない）。
+#      内容は正しいまま参照だけが消える退行は、この fixture でのみ検出できる。
+# ---------------------------------------------------------------------------
+F="$(make_fixture reference-file-unreferenced)"
+/usr/bin/python3 - "${F}/skills/task-dev/SKILL.md" <<'RFB'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+OLD = "references/review-contract.md"
+assert OLD in t, "fixture 生成失敗: review-contract.md への参照が見つかりません"
+open(p, "w", encoding="utf-8").write(t.replace(OLD, "（本節に統合済み）"))
+RFB
+run_case "reference-file 異常（SKILL.md からの参照喪失）→ exit 1" "${F}" 1 "[reference-file]"
+
+# ---------------------------------------------------------------------------
+# (25) reference-file: 参照ファイルの実体を削除する
+#      参照は残っているのにファイルが無い状態を検出する。検査対象ファイルの欠落は
+#      テンプレート実体の欠落と同じく exit 2（実行エラー）で報告される。
+# ---------------------------------------------------------------------------
+F="$(make_fixture reference-file-missing)"
+rm -f "${F}/skills/task-verify/references/phase-tracking.md"
+run_case "実行エラー（参照ファイル実体の欠落）→ exit 2" "${F}" 2 ""
+
+# ---------------------------------------------------------------------------
+# (26) flow-checklist: docs/ 配下へ廃止済み起動名を再混入させる
+#      CLAUDE.md から切り出した解説文書が、廃止済み名称の抜け道にならないことを確認する。
+# ---------------------------------------------------------------------------
+F="$(make_fixture flow-checklist-docs)"
+/usr/bin/python3 - "${F}/docs/skill-behaviors.md" <<'DOC'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t + "\n（旧導線: `/task-review <task_name>`）\n")
+DOC
+run_case "flow-checklist 異常（docs へ廃止起動名の再混入）→ exit 1" "${F}" 1 "[flow-checklist]"
 
 # ---------------------------------------------------------------------------
 # 集計
