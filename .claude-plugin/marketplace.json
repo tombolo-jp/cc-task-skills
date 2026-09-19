@@ -29,7 +29,7 @@
       },
       "description": "Claude Code スキル集",
       "category": "development",
-      "keywords": ["php", "wordpress", "ddev", "colima", "playwright", "documentation"]
+      "keywords": ["php", "wordpress", "ddev", "colima", "playwright", "documentation", "figma", "design", "mcp"]
     }
   ]
 }
