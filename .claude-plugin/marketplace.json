@@ -1,5 +1,5 @@
 {
-  "name": "tombolo-jp",
+  "name": "cc-task-skills",
   "owner": {
     "name": "Yuki Kokubo",
     "url": "https://github.com/tombolo-jp"
@@ -20,16 +20,6 @@
         "design",
         "review"
       ]
-    },
-    {
-      "name": "cc-skills",
-      "source": {
-        "source": "github",
-        "repo": "tombolo-jp/cc-skills"
-      },
-      "description": "Claude Code スキル集",
-      "category": "development",
-      "keywords": ["php", "wordpress", "ddev", "colima", "playwright", "documentation", "figma", "design", "mcp"]
     }
   ]
 }

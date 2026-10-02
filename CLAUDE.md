@@ -304,7 +304,7 @@ python3 scripts/measure_weight.py -v     # 識別子・重複の統計も表示
 
 導入方法は2通りあり、**スキル定義はどちらでも無改変で動作しなければならない**。
 
-1. **プラグイン**（推奨。クラウドセッション対応）: リポジトリ直下がマーケットプレイス `tombolo-jp` 兼プラグイン `cc-task-skills` を兼ねる。
+1. **プラグイン**（推奨。クラウドセッション対応）: リポジトリ直下がマーケットプレイス `cc-task-skills` 兼プラグイン `cc-task-skills` を兼ねる（1リポジトリ1マーケットプレイス。`marketplace.json` の `plugins` は自身のみを `"source": "./"` で指し、cc-skills は独立したマーケットプレイス `cc-skills` なので登録しない。両者の `name` を重複させない）。
 2. **個人スキルへコピー**（従来どおり）:
    ```bash
    cp -r cc-task-skills/skills/* ~/.claude/skills/
