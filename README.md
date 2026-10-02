@@ -16,14 +16,14 @@ Claude Codeで段階的な開発ワークフローを支援するカスタムス
 
 ### 方式A: プラグインとして導入（推奨）
 
-このリポジトリ自体がマーケットプレイス（`tombolo-jp`）兼プラグイン（`cc-task-skills`）になっています。
+このリポジトリ自体がマーケットプレイス（`cc-task-skills`）兼プラグイン（`cc-task-skills`）になっています（1リポジトリ1マーケットプレイス。`marketplace.json` の `"source": "./"` が同一リポジトリを指します）。
 
 **A-1. 手元の Claude Code に導入する（ローカル）**
 
 Claude Code 上で以下を実行します：
 ```
 /plugin marketplace add tombolo-jp/cc-task-skills
-/plugin install cc-task-skills@tombolo-jp
+/plugin install cc-task-skills@cc-task-skills
 ```
 
 既定で user スコープ（`~/.claude/settings.json`）に記録されるため、**一度実行すれば手元の全プロジェクトで使えます**。プロジェクトごとの設定は不要です。
@@ -45,7 +45,7 @@ Claude Code 上で以下を実行します：
 ```json
 {
   "extraKnownMarketplaces": {
-    "tombolo-jp": {
+    "cc-task-skills": {
       "source": {
         "source": "github",
         "repo": "tombolo-jp/cc-task-skills"
@@ -53,7 +53,7 @@ Claude Code 上で以下を実行します：
     }
   },
   "enabledPlugins": {
-    "cc-task-skills@tombolo-jp": true
+    "cc-task-skills@cc-task-skills": true
   }
 }
 ```
@@ -68,7 +68,7 @@ claude.ai のクラウド環境設定を開き、**Setup script** 欄に以下�
 ```bash
 #!/bin/bash
 claude plugin marketplace add tombolo-jp/cc-task-skills --scope user || true
-claude plugin install cc-task-skills@tombolo-jp --scope user || true
+claude plugin install cc-task-skills@cc-task-skills --scope user || true
 ```
 
 - セットアップスクリプトは **Claude Code の起動前**に root 権限で実行され、書き込んだ内容は環境キャッシュに保持されます。
@@ -97,7 +97,28 @@ claude plugin install cc-task-skills@tombolo-jp --scope user || true
 
 プラグインはバージョン番号を持たず、コミット SHA で更新が判定されます。最新化するには：
 ```
-/plugin marketplace update tombolo-jp
+/plugin marketplace update cc-task-skills
+```
+
+### 旧構成からの移行
+
+以前の構成（マーケットプレイス名 `tombolo-jp`、`cc-task-skills@tombolo-jp`）で導入済みの場合は、次の手順で入れ直してください：
+```
+/plugin uninstall cc-task-skills@tombolo-jp
+/plugin marketplace remove tombolo-jp
+/plugin marketplace add tombolo-jp/cc-task-skills
+/plugin install cc-task-skills@cc-task-skills
+```
+
+- 旧構成で cc-skills も導入していた場合は、`marketplace remove` の前に `/plugin uninstall cc-skills@tombolo-jp` を実行してください。cc-skills は独立したマーケットプレイスになったため、あとで `cc-skills@cc-skills` として入れ直します（下記参照）。
+- クラウド環境では、利用側リポジトリの `.claude/settings.json`（`extraKnownMarketplaces` / `enabledPlugins`）やセットアップスクリプトの記述も、新しい名前（`cc-task-skills` / `cc-task-skills@cc-task-skills`）へ書き換える必要があります。
+
+### cc-skills について
+
+cc-skills は独立したマーケットプレイス（`cc-skills`）になりました。このマーケットプレイスからは導入できません。導入する場合は次を実行します：
+```
+/plugin marketplace add tombolo-jp/cc-skills
+/plugin install cc-skills@cc-skills
 ```
 
 ### 方式B: 個人スキルとしてコピー（従来どおり）
