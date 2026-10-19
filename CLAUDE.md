@@ -28,11 +28,11 @@ This repository contains a collection of custom skills for Claude Code that impl
 The repository contains 6 interconnected skills that work together (only task-init is excluded from `--team` option support):
 
 1. **task-design** - Analyzes existing systems and creates technical design, **then breaks it down into an implementation task list (`T-nnn`) with effort estimation in the same run**. Supports `--team` option.
-2. **task-dev** - Creates (or reuses) a branch named after the task, executes implementation based on the design's implementation task list, **then automatically runs a review → fix → re-review closed loop (max 2 rounds; the 2nd round runs only when must-fix findings remain) inside the same invocation**, creates the development report, and finally commits (and, when enabled, pushes) the result. Review is **always delegated to a separate-context subagent** (regardless of `--team`) so that the agent which wrote the code never judges it from its own context; fixing is always single-agent. Review findings, the loop log, and the exit summary are **appended to `dev-result.md`** (no separate review/fix report files). Supports `--team` option (**review phase only** — 1 reviewer without it, 3 in parallel with it). **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
+2. **task-dev** - Creates (or reuses) a branch named after the task, executes implementation based on the design's implementation task list, **then automatically runs a review → fix → re-review closed loop (max 3 rounds; rounds 2 and 3 run only when must-fix findings remain, and look only at the lines the previous fix changed) inside the same invocation**, creates the development report, and finally commits (and, when enabled, pushes) the result. Review is **always delegated to a separate-context subagent** (regardless of `--team`) so that the agent which wrote the code never judges it from its own context; fixing is always single-agent. **task-dev never starts the development environment and never runs the application, tests, or builds — in local sessions too** (static, read-only confirmation only); findings that can only be settled by running something, and findings raised after round 1 outside the fix diff, are handed over to task-verify instead of entering the loop. Review findings, the loop log, and the exit summary are **appended to `dev-result.md`** (no separate review/fix report files). Supports `--team` option (**review phase only** — 1 reviewer without it, 3 in parallel with it). **Also accepts a comma-separated list of task names** for bulk sequential implementation (delegating each task to an isolated subagent and committing per task); `--team` is ignored in that mode.
 3. **task-init** - Creates task environment and requirements gathering. Optionally fetches task content from a URL into init.md. (No `--team` support)
 4. **task-req** - Creates requirements draft from raw customer requests. Supports `--team` option.
 5. **task-req-update** - Reflects user answers to the "要確認事項" (open questions) section back into req.md and consolidates it into a finalized version. Supports `--team` option.
-6. **task-verify** - Generates a verification procedure document **and, by default, executes it**. The generation phase emits **detailed, automation-ready test cases** (machine-readable preamble block, stable `V-nnn` identifiers, mandatory expected results); the automatic-execution phase runs those checkbox items, records required fixes in `verify-result.md`, and loops fix → re-verify (max 3 rounds). `--manual` switches to the concise human-oriented format and **generates only**; `--run-only` **executes only**. Supports `--team` option (**generation phase only**).
+6. **task-verify** - Generates a verification procedure document **and, by default, executes it**. **It verifies only what task-dev could not — things whose pass/fail is decided by actually running them — and consumes every finding task-dev handed over.** Before starting the development environment it **inventories every outbound-communication path (mail, external APIs, webhooks, browser-side requests) by reading files only, applies layered egress guards (the Disable Emails mu-plugin, its own guard mu-plugin, a DDEV override that points known hosts to loopback, Mailpit), and refuses to start the environment while any path stays uncovered**. The generation phase emits **detailed, automation-ready test cases** (machine-readable preamble block, stable `V-nnn` identifiers, mandatory expected results); the automatic-execution phase runs those checkbox items, records required fixes in `verify-result.md`, and loops fix → re-verify (max 3 rounds). `--manual` switches to the concise human-oriented format and **generates only**; `--run-only` **executes only**. Supports `--team` option (**generation phase only**).
 
 Each skill is a directory under `skills/` containing a `SKILL.md` file and optional `templates/` subdirectory for report templates.
 
@@ -67,7 +67,7 @@ Each skill is a directory under `skills/` containing a `SKILL.md` file and optio
 **分量の大きい定型文・規約は SKILL.md 本体に置かず、`skills/<skill>/references/*.md` へ切り出し、そのフェーズに着手する時点で Read する。** SKILL.md 本体には「いつ読むか」を指す数行のポインタだけを残す。
 
 - **常時ロードされる行数がスキルの実効的なコストである。** 指定していないオプション（`--team`）の規約や、まだ到達していないフェーズ（レビュー委譲の戻り値契約）を実装中のコンテキストへ載せることは、変更が触れる実コードを読むために使えたはずの予算を先に消費する。読解を削らずに仕様の常駐量を削るのが本原則である。
-- **切り出す単位はフェーズ境界と一致させる。** 現行の4ファイルは、`agent-teams.md`（`--team` 指定時のみ）・`phase-tracking.md`（ステップ0 で必ず）・`task-dev` の `review-contract.md`（レビュー・修正フェーズ着手直前。複数タスクモードでは実装委譲の直前にも）・`task-dev` の `git-ops.md`（ステップG＝git 前提の確定の着手時。両モードで必ず）である。フェーズ境界と無関係な分割は、読み込み忘れを招くため行わない。
+- **切り出す単位はフェーズ境界と一致させる。** 現行の5ファイルは、`agent-teams.md`（`--team` 指定時のみ）・`phase-tracking.md`（ステップ0 で必ず）・`task-dev` の `review-contract.md`（レビュー・修正フェーズ着手直前。複数タスクモードでは実装委譲の直前にも）・`task-dev` の `git-ops.md`（ステップG＝git 前提の確定の着手時。両モードで必ず）・`task-verify` の `egress-guard.md`（自動実行フェーズの外部通信の棚卸しの着手直前。`--manual` では読まない）である。フェーズ境界と無関係な分割は、読み込み忘れを招くため行わない。
 - **「読まれない参照」は規約の消失と同じである。** 本体から切り出した以上、参照が消えればその規約は永久に読まれない。`scripts/check_consistency.py` の `reference-file` 検査が、実在・スキル間の sha256 一致・**SKILL.md 本文からの参照の存在**の3点を機械的に担保する。
 - **重複配置は維持する。** 参照ファイルはスキルごとに同一内容で置く（`skills/*` をそのままコピーする既存のインストール手順を変えないため、および skills ルートへ SKILL.md を持たないディレクトリを作らないため）。重複そのものは従来どおり許容し、ズレは検査が担保する。
 - **逐語ブロックは要約して本体へ戻さない。** 委譲プロンプトの逐語ブロック（`review-contract.md` の 5-6-2）を記憶や要約から再構成すると、隔離規約と却下監査が「構造」から「指示」へ退化する。参照ファイルを読まずに委譲することを禁止事項とする。
@@ -99,10 +99,31 @@ Each skill is a directory under `skills/` containing a `SKILL.md` file and optio
 
 - **委譲は `--team` の有無と独立である。** `--team` は「並列体数と分割粒度のプロファイル選択」にすぎず、委譲そのものは常に必須である。自己レビューが許されるのは degrade 梯子の最終段のみで、その場合は必ず告知し成果物へ記録する。
 - **「委譲の不成立」も終了保証の対象に含める。** 隔離した先から成果が返らなければ、レビューは実施されていない。`findings` が空であることを「指摘0件」と解釈してよいのは**全担当が成果を返したときだけ**であり、1体でも `null` なら未確認範囲として記録し、全滅なら終了区分を `レビュー未実施（委譲不成立）` とする。**「何も検査されなかった」を「問題なし」と書かないこと**が、この原則の実効性を決める。
-- **外部の証拠源を持たないループには終了保証を機械的に置く。** 同一入力に対する同一モデルの再判断には新情報が入らないため、指摘へ安定識別子を採番し、散文を除いた署名で停滞を判定し、ループ上限を設ける（`task-dev` は**最大2周**で、2周目は修正必須が残った場合にのみ回す）。
+- **外部の証拠源を持たないループには終了保証を機械的に置く。** 同一入力に対する同一モデルの再判断には新情報が入らないため、指摘へ安定識別子を採番し、散文を除いた署名で停滞を判定し、ループ上限を設ける（`task-dev` は**最大3周**で、2周目・3周目は修正必須が残った場合にのみ回す）。
+- **1周目で出し切り、2周目以降は修正差分だけを見る。** 上限を置いても、各周が同じ範囲を見直す限り、前の周でも見えていた既存コードへの指摘（後出し）が毎周加わってループは終わらない。2周目以降のレビュー範囲は修正前の写しとの機械的な差分（行範囲）に限り、新規指摘のうち原因の行（`diffAnchor`）が修正差分の外にあるものは**後出しとして修正せず `task-verify` へ引き継ぐ**（破棄はしない）。読むだけでは確定できない指摘も同様に引き継ぎ、ループへ入れない。
 - **ツール層の型保証を失う経路では、検証をスキル本体が持つ。** 戻り値は「応答末尾の ```json フェンス」を契約とし、スキル本体が必須キー・語彙・型を検証する（`RV-1`〜`RV-6`）。語彙外の値は**危険側へ倒さない向き**へ丸め（例: 語彙外の `priority` は `高`）、丸めた事実を成果物へ記録する。形式逸脱は1回だけ再委譲し、なお不合格なら「未検査」として扱う（`E-36`）。
 - **収束は品質を意味しない。** 指摘が0件になったことを品質の証明として扱わない。本当の合否判定は動的検証（`task-verify`）が持つ。
 - **同一モデルの盲点は隔離しても共有される。** 本原則が防げるのは一貫性バイアスのみであり、モデル固有の知識欠落は防げない。これは設計上の受容事項として利用者へも案内する。
+
+## 設計原則: 静的な確認と動的な確認を分界する
+
+**`task-dev` はファイルを読んで判断できること（静的な確認）だけを、`task-verify` は動かして初めて合否が決まること（動的な確認）だけを確かめる。** 担当は証拠の種類（読解か実行結果か）で分け、同じことを二度確かめない。
+
+- **`task-dev` は開発環境を起動しない。** 実装・レビュー・修正のどのフェーズでも、ローカルセッションであっても、開発環境の起動と既存環境への接続、アプリ・テスト・ビルド・マイグレーション・コード生成の実行、DB への接続、外部への通信（`git-ops.md` が許す git 操作を除く）を行わない。開発環境には本番相当のデータ・実在の認証情報・外部連携が載っており、起動した瞬間から外部へデータを送りうるためである。**遮断なしに開発環境を起動する主体を作らない**ことが、この分界の安全上の意味である。
+- **静的に確定できないものは引き継ぐ。** 読むだけでは欠陥の有無を確定できない指摘（`保留（要動的確認）`）と、2周目以降に修正差分の外で見つかった指摘（`保留（後出し）`）は、`dev-result.md` の `## task-verify へ引き継ぐ事項` から `task-verify` へ渡し、`task-verify` は**全件**を `- 由来:` つきの検証項目にする（自己検査で対応を確かめる）。
+- **`task-verify` は読めば判定できる項目を書かない。** ファイル・設定・コードの有無や書き方、設計書との一致を確かめる項目は `task-dev` の責務である。既存の自動テスト・静的解析・ビルドの**実行**は `task-verify` が行う（`task-dev` はこれらを実行しない）。
+- 委譲プロンプトの禁止事項にも同じ境界を逐語で埋め込む（指示だけでなく、委譲先が守るべき規約として渡す）。
+
+## 設計原則: 外部通信を遮断してから開発環境を起動する
+
+**`task-verify` は、開発環境を起動する前にプロジェクトの外部通信の経路を棚卸しし、経路ごとに遮断層を適用して確かめてから起動する。覆えない経路が残れば起動しない。** 規約の逐語本文は `skills/task-verify/references/egress-guard.md` が持ち、自動実行フェーズの棚卸しの着手直前にのみ読み込む。
+
+- **起動の瞬間を含めて止める。** 遮断層はすべて**ファイルの設置だけで適用でき、起動を必要としないもの**に限る（WordPress の mu-plugin、DDEV の上書きファイル）。稼働中の環境は遮断なしで起動されているため、先に停止してから適用し、起動し直す。
+- **メールは多層で止める（2層以上を目標）。** WordPress では Disable Emails の mu-plugin（プラグインの有効・無効に依存せず、どのプラグインより先に `wp_mail()` を送信しない実装で確定させる）と、本スキルの遮断用 mu-plugin（`pre_wp_mail`・PHPMailer の Mailpit への付け替え・WP HTTP API の外部遮断）を重ね、DDEV では判明した通信先をループバックへ向ける上書きと Mailpit を重ねる。Mailpit 単独は層として不十分である（SMTP・配信 API の連携は捕捉しない）。
+- **経路ごとに数え、0層の経路が残れば起動しない。** 通信先が判別できない経路は除外せず「不明」として数える。0層の経路は利用者が通信先ごとに明示承認した場合だけ通し、承認を記録する（対話できなければ起動しない）。
+- **確認は送信を伴わない方法で行う。** 起動の前（ファイル・合成後の設定）と起動の直後（検証項目と DB のバックアップより前）の2回確かめ、起動後に効いていなければ直ちに停止する。
+- **遮断層を外すのは停止の後だけ。** 遮断層を外した状態で開発環境を起動しない（検証前に稼働していた環境も、再起動はしない）。DB の復元に失敗した場合は遮断層を残す（送信待ちのデータが残っているため）。
+- **秘密の値を記録しない。** 棚卸しで記録してよいのはキー名・定数名・ホスト名だけである。
 
 ## 設計原則: git 操作は設定で明示された範囲だけ行う
 
@@ -195,7 +216,7 @@ Keys are `branch.create` / `branch.prefix` / `commit` / `push`, merged **key by 
 
 ## Key Skill Behaviors
 
-> **フロー強制（全スキル共通）**: 6スキルすべてが「手順」冒頭の **ステップ0** で `references/phase-tracking.md`（共通の判定手順）を読み込んだうえで、自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は単一タスクモードで14フェーズ（`--team` 非依存）、複数タスクモードで8フェーズを登録し、加えて実行時に design.md の実装タスク一覧（`T-nnn`。todo.md が存在する場合はその項目も）を Task として動的登録して1件ずつ着手・完了を明示し、さらにレビューパス1周ごとに `[review pass i/3]`（修正必須があれば `[fix pass i/3]` も）を動的追加する（パス内の個別 `R-nnn` は Task 化しない）。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify** は既定モードで18フェーズ（`--manual` は7、`--run-only` は12）を登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
+> **フロー強制（全スキル共通）**: 6スキルすべてが「手順」冒頭の **ステップ0** で `references/phase-tracking.md`（共通の判定手順）を読み込んだうえで、自スキルの全フェーズを Task として登録し、着手時に `in_progress`・完了時に `completed` へ遷移させることで、スキップ・前倒し・取りこぼしを構造的に防ぐ（Task ツールが利用できない場合はチェックリスト宣言へフォールバックする。「[設計原則: フローは Task ツールで明示的に追跡する](#設計原則-フローは-task-ツールで明示的に追跡する)」の具体化）。登録は省略不可（成果物の必須要素）。**task-dev** は単一タスクモードで14フェーズ（`--team` 非依存）、複数タスクモードで8フェーズを登録し、加えて実行時に design.md の実装タスク一覧（`T-nnn`。todo.md が存在する場合はその項目も）を Task として動的登録して1件ずつ着手・完了を明示し、さらにレビューパス1周ごとに `[review pass i/3]`（修正必須があれば `[fix pass i/3]` も）を動的追加する（パス内の個別 `R-nnn` は Task 化しない）。**task-init** は URL 有無の分岐判定後に確定する系列のフェーズのみを登録する特例とする。**task-verify** は既定モードで20フェーズ（`--manual` は7、`--run-only` は14）を登録したうえで、確認パス1周ごとに Task を動的追加する（各パス内の個別項目は Task 化しない）。
 
 各スキルの引数・分岐・終了条件・記録要件の詳細は **[`docs/skill-behaviors.md`](docs/skill-behaviors.md)** にある（正本は各 `skills/<skill>/SKILL.md`）。
 
@@ -205,8 +226,8 @@ Keys are `branch.create` / `branch.prefix` / `commit` / `push`, merged **key by 
 | `task-req` | `/task-req {task_name} [--team]` | init.md から req.md を起こす。末尾の「要確認事項」は**回答で設計・実装の分岐が変わる問いだけ**に絞る（包含が先・除外語彙 `X-1`〜`X-6`・判定不能は残す）。0件なら節ごと出力しない |
 | `task-req-update` | `/task-req-update {task_name} [--team]` | 「要確認事項」への回答を本文へ反映し確定版へ整理。未解決項目は残し、全解決で節を削除。冪等（回答 → 再実行のループ） |
 | `task-design` | `/task-design {task_name} [--team]` | §1〜§11 の設計 ＋ §12 実装タスク一覧（`T-nnn`）＋ §13 工数見積もりを1回で完結。**設計確定線**より上は見積もり中 read-only。行数 ÷ 実装時間 < 30 行/h の見積もりは差し戻し（上限2周） |
-| `task-dev` | `/task-dev {task_name}[,...] [--team]` | **ステップG** で設定を解決し `feature/<task_name>` を作成・切替（既定）。`T-nnn` 順に実装し、続けて**レビュー → 修正 → 再レビューを最大2周**（レビューは常に別コンテキストへ委譲）。**権限の切替線**の手前と奥で書き込み権限が変わる。**ステップC** でコミットし、`push` が真なら `git push -u origin <branch>`（force push は行わない）。カンマ区切りで複数タスクを逐次実装しタスクごとにコミット（この場合ブランチは作成しない） |
-| `task-verify` | `/task-verify {task_name} [--manual] [--run-only] [--team]` | 検証手順書を生成し、既定では**そのまま自動実行**（上限5周）。`--manual` は人間向け簡潔版の生成のみ、`--run-only` は実行のみ。**コミットは一切しない** |
+| `task-dev` | `/task-dev {task_name}[,...] [--team]` | **ステップG** で設定を解決し `feature/<task_name>` を作成・切替（既定）。`T-nnn` 順に実装し、続けて**レビュー → 修正 → 再レビューを最大3周**（レビューは常に別コンテキストへ委譲。2周目以降は修正差分だけを見る）。**開発環境を起動せず、アプリ・テストも実行しない**（静的な確認のみ。動的な確認は `task-verify` へ引き継ぐ）。**権限の切替線**の手前と奥で書き込み権限が変わる。**ステップC** でコミットし、`push` が真なら `git push -u origin <branch>`（force push は行わない）。カンマ区切りで複数タスクを逐次実装しタスクごとにコミット（この場合ブランチは作成しない） |
+| `task-verify` | `/task-verify {task_name} [--manual] [--run-only] [--team]` | 動かして確かめることだけを検証手順書にし、既定では**そのまま自動実行**（上限3周）。開発環境の起動前に**外部通信を棚卸しして遮断**し、覆えない経路が残れば起動しない。`--manual` は人間向け簡潔版の生成のみ、`--run-only` は実行のみ。**コミットは一切しない** |
 
 ## Agent Teams オプション
 
@@ -338,6 +359,8 @@ The skills support Japanese language for requirements definition and design docu
 - **Quality Focus**: Emphasizes code quality, maintainability, and integration with existing systems
 - **Minimal Commentary**: Generated code carries only comments that cannot be recovered by reading the code; comment density is capped at the surrounding file's existing level, and implementation intent is recorded in `dev-result.md` rather than defended in comments
 - **Structural Isolation of Review**: The agent that wrote the code never judges it from its own context; review is delegated to a separate context and the implementer's own account is not passed along
+- **Static vs. Dynamic Split**: `task-dev` confirms only what can be judged by reading files and never starts the development environment; `task-verify` confirms only what must be run, and consumes everything `task-dev` handed over — nothing is checked twice
+- **Egress Before Startup**: the development environment is started only after every outbound-communication path has been inventoried and covered by a verified guard layer; mail is stopped in layers, and guards come off only after the environment is stopped
 - **Task-named Branches**: implementation lands on `feature/<task_name>`, created at the moment implementation actually starts (`task-dev`), never earlier; commits and pushes are controlled by a project-level settings file, and the detection that decides the `push` default degrades toward *warning the user*, never toward a silent push or a silent loss
 - **Progress Tracking**: Concrete todo lists for work management
 - **Consistency**: Respects existing code patterns and conventions
