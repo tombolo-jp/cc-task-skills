@@ -41,11 +41,14 @@
       "fix": "（修正方針）"
     }
   ],
+  "priorStatus": [
+    { "rId": "R-001", "status": "resolved" }
+  ],
   "summary": "（1〜2文の要約）"
 }
 ```
 
-**上記の全キーが必須**（`findings` は0件なら空配列、`findings[]` は12キーすべて必須）。任意キーは `status: "failure"` 時の `reason` と `unreviewedReason: "other"` 時の `coverage.note` のみ。
+**上記の全キーが必須**（`findings` は0件なら空配列、`findings[]` は12キーすべて必須。`priorStatus` は1周目では空配列）。任意キーは `status: "failure"` 時の `reason` と `unreviewedReason: "other"` 時の `coverage.note` のみ。
 
 | キー | 語彙・規定 |
 |---|---|
@@ -62,6 +65,7 @@
 | `basisKind` | `requirement_id` / `design_section` / `code_line` |
 | `basisAnchor` | 根拠のアンカー（要件 ID・設計節番号・`path:line`）。**署名のハッシュ入力** |
 | `basisQuote` | 根拠の原文引用（散文。**ハッシュ非対象**） |
+| `priorStatus` | 2周目以降に渡した前周の指摘ごとの判定。`rId` は**渡した `R-nnn` のみ**、`status` は `resolved`（解消を確認した）/ `unresolved`（残っている）。**前周の指摘の解消は、この申告の `resolved` によってのみ認める**（再報告が無いことを解消とみなさない。SKILL.md `RS-2`） |
 
 **総合判定・指摘件数のキーは置きません。** 総合判定は呼び出し元が `findings[].priority` から導出します（理由は 5-6-4）。
 
@@ -95,6 +99,10 @@
 
 【2 周目以降のみ】【前周の指摘（解消確認の対象）】
 - R-001 [未解消] <path>#<symbol> <1 行要約>
+前周の指摘のそれぞれについて、解消を確認できたら priorStatus に resolved、残っていれば unresolved を返すこと。確認できなかったものは unresolved とすること（返さなかった指摘は残っているものとして扱われる）。
+
+【2 周目以降のみ】【この周に割り当てたファイル（範囲の申告の対象）】
+- <修正差分のあるファイルと、前周の未解決の指摘の対象ファイル>
 
 【2 周目以降のみ】【修正差分の行範囲（この周のレビュー範囲。修正前の写しとの機械的な差分であり、差分本文・修正の意図は与えない）】
 - <path 1>: 130-134
@@ -195,6 +203,7 @@
 | `basisKind` | `code_line` として扱う（`basisAnchor` が要件 ID・設計節番号の書式に合致する場合のみ `requirement_id` / `design_section` へ寄せる） | 署名の入力は `basisAnchor` であり `basisKind` ではないため、停滞判定に影響しない |
 | `unreviewedReason` | `other` として扱う | 影響は記録のみ |
 | `verification` | **`static`** として扱う | 修正の対象に残す側（`dynamic` へ逃がして修正を免れる経路を作らない） |
+| `priorStatus[].status` | **`unresolved`** として扱う。渡していない `rId` は捨てる（記録する） | 解消の誤認を防ぐ側 |
 | `diffAnchor`（`パス:行番号` として解釈できない） | 2周目以降は**修正差分の範囲内**として扱う（1周目は判定に使わないため影響なし） | 後出しへ逃がさない側（修正の対象に残す） |
 | `disposition` | **形式逸脱**として扱う（`E-36`）。**丸めない** | 誤って `fixed` へ倒すと未修正が解消として記録される |
 
@@ -220,7 +229,7 @@ priority 高 が1件以上（未解決）      → 総合判定: 修正必須
 
 | # | 規則 |
 |---|---|
-| CV-1 | 呼び出し元は委譲時に**割り当てたパス集合 `assigned`** を保持する（戻り値側には持たせない。自己申告にしないため） |
+| CV-1 | 呼び出し元は委譲時に**割り当てたパス集合 `assigned`** を保持する（戻り値側には持たせない。自己申告にしないため）。1周目は `RS-1` の全ファイル、2周目以降は**修正差分のあるファイル ∪ 前周の未解決の指摘の対象ファイル**とし、プロンプトに列挙する |
 | CV-2 | 実効未確認範囲 `unreviewed = coverage.unreviewedPaths ∪ (assigned − coverage.reviewedPaths)` とする。**`reviewedPaths` にも `unreviewedPaths` にも現れないパスは未確認として扱う**（fail-safe） |
 | CV-3 | `coverage` に「完全に見た」を表す真偽キーは置かない。完全性は `unreviewed.length === 0` として**呼び出し元が算出**する（自己申告の真偽値は必ず `true` に倒れるため） |
 | CV-4 | `findings.length === 0` かつ `unreviewed.length > 0` の戻り値は、**通常の正常終了として扱わない**。終了区分は `レビュー範囲不完全` とする |

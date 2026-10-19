@@ -17,7 +17,7 @@ environment:
   type: null
   db_backup_command: null
   db_restore_command: null
-  mail_guard_command: null
+  mail_guard_command: null   # 参考情報。外部通信の遮断は自動実行フェーズの遮断層が行い、この値では代えない
 reset_commands: []
 ```
 
@@ -27,6 +27,7 @@ reset_commands: []
 - 検証対象: [実装された機能の概要を1-2行で]
 - 検証項目数: [N]件
 - 方針: 動かして確かめることに限る（ファイルを読めば判定できる確認は task-dev が済ませている）
+- 検証項目にしない引き継ぎ: [R-nnn（動かしても振る舞いに現れない理由）, ... / なし]
 
 ## 環境準備
 

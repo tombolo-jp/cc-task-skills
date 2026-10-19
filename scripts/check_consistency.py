@@ -97,7 +97,7 @@ ENV_JSON_LINE = '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"'
 # /task-verify-run は 2026-08-13 に task-verify へ統合され起動名ごと廃止（互換名を残さない）。
 # /task-review・/task-fix は 2026-08-16 に task-dev へ統合され起動名ごと廃止（同上）。
 # スラッシュ前置に限定するのは、内部作業領域 `.verify-run/`・スナップショット名 `verify-run-<run_id>`・
-# `00-verify-run-mail-block.php` を巻き込まないため。同じ理由で `/task-review` / `/task-fix` も
+# `000-verify-run-*.php`（外部通信の遮断用 mu-plugin）を巻き込まないため。同じ理由で `/task-review` / `/task-fix` も
 # スラッシュ前置に限定する（`## レビュー指摘一覧`・`fix-result` 等の一般語や、
 # `task-dev` 本文が説明のために用いる「レビュー」「修正」の語を巻き込まない）。
 OBSOLETE_NAME_RE = re.compile(
