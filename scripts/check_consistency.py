@@ -51,7 +51,8 @@ SHARED_REFERENCES = {
 LOCAL_REFERENCES = {
     # review-contract.md: レビュー・修正フェーズ着手直前に読む
     # git-ops.md: ステップG（git 前提の確定）の着手時に読む
-    "task-dev": ["review-contract.md", "git-ops.md"],
+    # asset-build.md: ステップB（アセットのビルド）の着手時に読む
+    "task-dev": ["review-contract.md", "git-ops.md", "asset-build.md"],
     # egress-guard.md: 自動実行フェーズの外部通信の棚卸し（ステップ10）着手直前に読む
     "task-verify": ["egress-guard.md"],
 }
